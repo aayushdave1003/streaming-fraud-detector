@@ -1,0 +1,33 @@
+# ── Secrets ──
+.env
+.cache
+.cache/
+.spotify_cache
+
+# ── Python ──
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.cache/
+
+# ── OS ──
+.DS_Store
+
+# ── Large source datasets (exceed GitHub limits / not redistributable here) ──
+# Rebuild/obtain these locally — see README "Data" section.
+charts.csv
+charts_combined.csv
+dataset2.csv
+dataset3.csv
+spotify_2015_2025_85k.csv
+spotify_data.csv
+spotify_data clean.csv
+spotify top songs data 2026.csv
+track_data_final.csv
+Spotify Global Chart 2024.xlsx
+
+# Empty / scratch API pulls
+spotify_real_data.csv
