@@ -148,3 +148,37 @@ def test_model_persistence_roundtrip(tmp_path):
 def test_predict_requires_fit():
     with pytest.raises(RuntimeError):
         EnsembleDetector().predict(np.zeros((3, 5)))
+
+
+# ── Holiday-seasonality confounder ──────────────────────────────────────
+def _artist_row(**kw):
+    base = dict(bot_streams=0.0, holiday_bot_streams=0.0, total_streams=1000.0,
+                flagged_days=0, holiday_flagged_days=0, bot_pct=0.0,
+                confidence=50.0, note="")
+    base.update(kw)
+    return base
+
+
+def test_holiday_confounder_excuses_pure_seasonal_artist():
+    # Almost all flags fall in the holiday window -> reclassified as legit.
+    df = pd.DataFrame([_artist_row(
+        bot_streams=800.0, holiday_bot_streams=800.0, total_streams=1000.0,
+        flagged_days=10, holiday_flagged_days=10, bot_pct=80.0, confidence=90.0,
+    )])
+    out = run_pipeline.apply_holiday_confounder(df)
+    assert out.loc[0, "bot_pct"] == 0.0          # holiday bot streams removed
+    assert out.loc[0, "confidence"] < 90.0        # confidence down-weighted
+    assert "Holiday" in out.loc[0, "note"]
+    assert out.loc[0, "holiday_flag_share"] == 1.0
+
+
+def test_holiday_confounder_leaves_year_round_artist_untouched():
+    # A one-off December flag amid year-round activity -> low share -> untouched.
+    df = pd.DataFrame([_artist_row(
+        bot_streams=500.0, holiday_bot_streams=50.0, total_streams=1000.0,
+        flagged_days=20, holiday_flagged_days=1, bot_pct=50.0, confidence=70.0,
+    )])
+    out = run_pipeline.apply_holiday_confounder(df)
+    assert out.loc[0, "bot_pct"] == 50.0
+    assert out.loc[0, "confidence"] == 70.0
+    assert out.loc[0, "note"] == ""

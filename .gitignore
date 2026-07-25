@@ -38,4 +38,4 @@ charts_us_global.parquet
 # Trained model (~90 MB; rebuild with run_pipeline.py):
 model.joblib
 *.joblib
-etl.log
+*.log

@@ -52,6 +52,28 @@ def _confidence(flagged_days, total_days, max_spike, drop_count):
     ).clip(0, 100).round(1)
 
 
+def apply_holiday_confounder(artist: pd.DataFrame) -> pd.DataFrame:
+    """Systematic holiday-seasonality correction (replaces the name allowlist).
+
+    For artists whose flagged days are overwhelmingly in Nov–Dec, reclassify the
+    holiday-window bot streams as legitimate (drops bot_pct), scale confidence
+    down, and annotate. Conservative by design via a high share threshold.
+    """
+    denom = artist["flagged_days"].replace(0, np.nan)
+    share = (artist["holiday_flagged_days"] / denom).fillna(0)
+    artist["holiday_flag_share"] = share.round(2)
+    mask = (share >= config.HOLIDAY_FLAG_SHARE_THRESHOLD) & (artist["flagged_days"] > 0)
+    artist.loc[mask, "bot_streams"] = (
+        artist.loc[mask, "bot_streams"] - artist.loc[mask, "holiday_bot_streams"]
+    ).clip(lower=0)
+    artist.loc[mask, "bot_pct"] = (
+        artist.loc[mask, "bot_streams"] / artist.loc[mask, "total_streams"] * 100
+    ).round(1)
+    artist.loc[mask, "confidence"] = (artist.loc[mask, "confidence"] * config.HOLIDAY_CONF_MULT).round(1)
+    artist.loc[mask, "note"] = config.HOLIDAY_NOTE
+    return artist
+
+
 def track_level(daily: pd.DataFrame) -> pd.DataFrame:
     track = daily.groupby(signals.GROUP).agg(
         total_streams=("streams", "sum"),
@@ -74,7 +96,8 @@ def track_level(daily: pd.DataFrame) -> pd.DataFrame:
 
 def artist_level(daily: pd.DataFrame) -> pd.DataFrame:
     cols = ["artist", "title", "streams", "ensemble_bot", "bot_stream_val", "year",
-            "spike_ratio", "drop_after_spike", *signals.REASON_COLUMNS]
+            "spike_ratio", "drop_after_spike", "holiday_bot_stream_val", "holiday_flag",
+            *signals.REASON_COLUMNS]
     dc = daily[cols].copy().reset_index(drop=True)
     dc["artist_split"] = dc["artist"].str.split(config.COLLAB_SPLIT_REGEX, regex=True)
     dc = dc.explode("artist_split")
@@ -89,6 +112,8 @@ def artist_level(daily: pd.DataFrame) -> pd.DataFrame:
         years_active=("year", "nunique"),
         max_spike_ratio=("spike_ratio", "max"),
         drop_events=("drop_after_spike", "sum"),
+        holiday_bot_streams=("holiday_bot_stream_val", "sum"),
+        holiday_flagged_days=("holiday_flag", "sum"),
         **_REASON_AGG,
     ).reset_index().rename(columns={"artist_split": "artist"})
 
@@ -115,7 +140,10 @@ def artist_level(daily: pd.DataFrame) -> pd.DataFrame:
         if mask.any():
             artist.loc[mask, "confidence"] = (artist.loc[mask, "confidence"] * config.DEATH_SPIKE_CONF_MULT).round(1)
             artist.loc[mask, "note"] = config.DEATH_SPIKE_NOTE
-    return artist
+
+    # Confounder: systematic holiday-seasonality correction.
+    artist = apply_holiday_confounder(artist)
+    return artist.drop(columns=["holiday_bot_streams", "holiday_flagged_days"])
 
 
 # ── Plot ────────────────────────────────────────────────────────────────
@@ -161,6 +189,9 @@ def run(data: str = config.CURATED_PARQUET, mode: str = "retrospective",
     daily["iso_bot"], daily["lof_bot"], daily["ensemble_bot"] = iso_bot, lof_bot, ensemble
     daily["bot_stream_val"] = daily["streams"] * daily["ensemble_bot"]
     daily = signals.add_reason_flags(daily, "ensemble_bot")
+    daily["holiday_window"] = daily["month"].isin(config.HOLIDAY_MONTHS).astype(int)
+    daily["holiday_bot_stream_val"] = daily["bot_stream_val"] * daily["holiday_window"]
+    daily["holiday_flag"] = daily["ensemble_bot"] * daily["holiday_window"]
     say(f"🤖 IF flagged {iso_bot.sum():,} | LOF {lof_bot.sum():,} | ensemble {ensemble.sum():,}")
 
     track = track_level(daily)

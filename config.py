@@ -12,7 +12,8 @@ ROLLING_WINDOW = 7                        # days, for rolling mean / std
 
 # ── Anomaly models ──────────────────────────────────────────────────────
 RANDOM_STATE = 42
-CONTAMINATION = 0.03          # assumed anomaly fraction (both IF and LOF)
+CONTAMINATION = 0.02          # assumed anomaly fraction (both IF and LOF); see tune.py
+                             # (sweep: 0.02 ranks documented purge artists higher than 0.03)
 IF_ESTIMATORS = 200
 LOF_NEIGHBORS = 20
 
@@ -69,6 +70,17 @@ DEATH_SPIKES = {
 }
 DEATH_SPIKE_CONF_MULT = 0.4
 DEATH_SPIKE_NOTE = "⚠️ Death/tribute spike detected — results may be inflated"
+
+# Systematic holiday-seasonality confounder (generalizes HOLIDAY_ARTISTS above).
+# When an artist's flagged days are overwhelmingly concentrated in Nov–Dec, the
+# "anomaly" is almost certainly Christmas seasonality, not fraud: reclassify the
+# holiday-window bot streams as legitimate and down-weight confidence. The high
+# share threshold keeps this conservative — a one-off December fraud by an
+# otherwise year-round artist has a low holiday share and is not excused.
+HOLIDAY_MONTHS = [11, 12]
+HOLIDAY_FLAG_SHARE_THRESHOLD = 0.6
+HOLIDAY_CONF_MULT = 0.3
+HOLIDAY_NOTE = "🎄 Holiday-seasonal spike — likely legitimate, not fraud"
 
 # ── Collab splitting (artist-level attribution) ─────────────────────────
 COLLAB_SPLIT_REGEX = r",\s*|\s*&\s*|\s*ft\.?\s*|\s*feat\.?\s*"

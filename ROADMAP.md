@@ -10,9 +10,9 @@ now lives.
   against the documented purges in `real_world_reports.csv` using rank-based
   metrics (precision/recall@k, median percentile, ROC-AUC), with an explicit
   temporal caveat (chart data is 2017–2021; purges are ~2025).
-  *Result on the current data: ROC-AUC ≈ 0.80 by `bot_pct`; Kendrick Lamar,
-  BTS, and BLACKPINK all rank above the median; Michael Smith is correctly
-  absent (independent artist, never charted).*
+  *Result on the current data (contamination 0.02): ROC-AUC ≈ 0.87 by `bot_pct`;
+  Kendrick Lamar (top 5%), BTS, and BLACKPINK all rank above the median;
+  Michael Smith is correctly absent (independent artist, never charted).*
 - [x] **Per-flag explainability.** The pipeline tags every flagged day with the
   signals that fired (`signals.add_reason_flags`) and rolls them up into a
   `flag_reasons` column on both result tables; the dashboard shows a
@@ -24,10 +24,10 @@ now lives.
 - [x] **Justify / tune the anomaly rate.** All constants moved to `config.py`.
   `tune.py` sweeps `contamination` and reports the effect on flagged fraction
   and documented-artist ranks (`tune_contamination.png/.csv`).
-  *Finding: lower contamination (0.01–0.02) ranks the documented artists
-  higher (median percentile ~91, AUC ~0.89) than the 0.03 default (~78 / 0.80).
-  The default trades precision for coverage; 0.02 is a reasonable tightening if
-  precision matters more.*
+  *Finding: lower contamination ranks the documented artists higher — so the
+  default was changed from 0.03 to **0.02** (median percentile 78→86, AUC
+  0.80→0.87). 0.01 is tighter still (~91 / ~0.89) but flags very little; 0.02 is
+  the balance point.*
 
 ## Tier 2 — A pipeline, not 3 scripts
 
@@ -54,10 +54,13 @@ now lives.
 - [x] **Unit tests.** `tests/test_signals.py` covers the signals, the look-ahead
   boundary, collab splitting, confidence monotonicity, ensemble detection, and
   model-persistence round-trip. `pytest` — 14 passing.
-- [~] **Systematic confounder handling.** Partial. The holiday catalog and
-  death/tribute spikes are handled in `config.py` + `run_pipeline.artist_level`,
-  and are now centralized/testable — but release-week and viral/playlist spikes
-  are still not modeled. See "Next" below.
+- [x] **Systematic holiday confounder.** `run_pipeline.apply_holiday_confounder`
+  replaces the hardcoded name allowlist: when an artist's flagged days are
+  overwhelmingly (≥60%) in Nov–Dec, the holiday-window bot streams are
+  reclassified as legitimate and confidence is down-weighted with a 🎄 note
+  (unit-tested). This removed Wham!, Michael Bublé, and other Christmas-catalog
+  acts from the top of the leaderboard. Death/tribute spikes are handled the
+  same way. *Still open:* release-week and viral/playlist spikes (see "Next").
 
 ## Next (not yet done)
 

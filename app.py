@@ -315,6 +315,8 @@ lb_cols = ["artist", "genre_category", "total_streams", "bot_streams", "bot_pct"
            "royalty_lost", "confidence", "flagged_days"]
 if "flag_reasons" in filtered.columns:      # explainability: why each artist was flagged
     lb_cols.append("flag_reasons")
+if "note" in filtered.columns:              # confounder annotations (holiday / death spike)
+    lb_cols.append("note")
 leaderboard = mask_low_confidence(filtered, reveal_conf, guardrail_on)
 display_df = leaderboard[lb_cols].rename(columns={
     "artist": "Artist",
@@ -326,5 +328,6 @@ display_df = leaderboard[lb_cols].rename(columns={
     "confidence": "Confidence",
     "flagged_days": "Flagged Days",
     "flag_reasons": "Why flagged",
+    "note": "Note",
 })
 st.dataframe(display_df, use_container_width=True, hide_index=True)
