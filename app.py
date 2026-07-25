@@ -134,7 +134,7 @@ for tab, genre in zip(tabs, genre_list):
             font_color="white", yaxis=dict(autorange="reversed"),
             coloraxis_showscale=False, height=400
         )
-        st.plotly_chart(fig, use_container_width=True, key=f"bar_{genre}")
+        st.plotly_chart(fig, width="stretch", key=f"bar_{genre}")
 
         # ── ARTIST DRILL DOWN ──
         st.markdown("#### 🔍 Select an artist to investigate")
@@ -212,7 +212,7 @@ for tab, genre in zip(tabs, genre_list):
                     height=400,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02)
                 )
-                st.plotly_chart(fig_timeline, use_container_width=True, key=f"timeline_{genre}_{selected_artist}")
+                st.plotly_chart(fig_timeline, width="stretch", key=f"timeline_{genre}_{selected_artist}")
             else:
                 st.info("No timeline data available for this artist.")
 
@@ -237,7 +237,7 @@ for tab, genre in zip(tabs, genre_list):
                     font_color="white", yaxis=dict(autorange="reversed"),
                     coloraxis_showscale=False, height=400
                 )
-                st.plotly_chart(fig_tracks, use_container_width=True, key=f"tracks_{genre}_{selected_artist}")
+                st.plotly_chart(fig_tracks, width="stretch", key=f"tracks_{genre}_{selected_artist}")
 
                 # Royalty table
                 st.dataframe(
@@ -249,7 +249,7 @@ for tab, genre in zip(tabs, genre_list):
                         "royalty_lost": "💰 Royalties Lost ($)",
                         "flagged_days": "Flagged Days"
                     }),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
 
@@ -278,7 +278,7 @@ with col2:
         "artist": "Artist",
         "bot_streams": "Bot Streams",
         "royalty_lost": "Royalties Lost"
-    }), hide_index=True, use_container_width=True)
+    }), hide_index=True, width="stretch")
 
 st.divider()
 
@@ -330,4 +330,4 @@ display_df = leaderboard[lb_cols].rename(columns={
     "flag_reasons": "Why flagged",
     "note": "Note",
 })
-st.dataframe(display_df, use_container_width=True, hide_index=True)
+st.dataframe(display_df, width="stretch", hide_index=True)

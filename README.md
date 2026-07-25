@@ -32,6 +32,26 @@ against publicly documented, real-world stream-purge incidents.
 
 ---
 
+## Dashboard
+
+An interactive Streamlit dashboard (`streamlit run app.py`) for exploring the results.
+
+![Dashboard overview](docs/dashboard-overview.png)
+*Filters plus confidence / name-guardrail controls, headline KPIs, and the
+most-suspicious-artists chart (bars colored by confidence).*
+
+![Per-artist stream timeline](docs/dashboard-timeline.png)
+*Drill into any artist: daily streams vs. a 7-day average and a 2× spike
+threshold, with suspicious spikes marked in red — alongside a per-track
+breakdown and estimated royalty impact.*
+
+The [leaderboard](docs/dashboard-leaderboard.png) adds a "Why flagged"
+explainability column and a confidence-gated name guardrail; the
+[royalty calculator](docs/dashboard-royalty.png) estimates the dollar impact.
+
+> Reminder: a high "bot %" is a statistical anomaly signal, **not** an
+> accusation of wrongdoing — see the disclaimer at the top.
+
 ## Pipeline architecture
 
 ```

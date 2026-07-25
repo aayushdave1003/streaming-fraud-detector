@@ -1,3 +1,11 @@
+"""Genre tagging via the Spotify Web API.
+
+⚠️ NOTE (2025): Spotify deprecated the artist `genres` field for
+Client-Credentials apps — `sp.artist(id)["genres"]` now returns an empty list
+for essentially every artist, so this script tags everything "Other". Until
+Spotify restores access, use `assign_genres.py` (offline curated lists), which
+is what the committed `artist_genres.csv` is built from.
+"""
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
