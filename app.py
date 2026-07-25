@@ -1,3 +1,5 @@
+import os
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -16,18 +18,50 @@ st.markdown("""
 
 SPOTIFY_RATE = 0.004  # avg $ per stream
 
+
+@st.cache_data
+def _load_charts():
+    """Load chart history, preferring the fast curated parquet.
+
+    Degrades gracefully: if neither the parquet nor the raw CSV is present
+    (e.g. a fresh clone without the large gitignored data), the dashboard
+    still runs — the per-artist timelines just show "no data".
+    """
+    for path in ("charts_us_global.parquet", "charts_combined.csv"):
+        if os.path.exists(path):
+            if path.endswith(".parquet"):
+                return pd.read_parquet(path)
+            return pd.read_csv(path, parse_dates=["date"])
+    return pd.DataFrame(columns=["artist", "title", "date", "region", "streams"])
+
+
 @st.cache_data
 def load_data():
     artists = pd.read_csv("fraud_results_artists.csv")
     tracks = pd.read_csv("fraud_results_tracks.csv")
     genres = pd.read_csv("artist_genres.csv")
     rw = pd.read_csv("real_world_reports.csv")
-    charts = pd.read_csv("charts_combined.csv", parse_dates=["date"])
+    charts = _load_charts()
     artists = artists.merge(genres[["artist", "genre_category"]], on="artist", how="left")
     artists["genre_category"] = artists["genre_category"].fillna("Other")
     artists["royalty_lost"] = (artists["bot_streams"] * SPOTIFY_RATE).round(0)
     tracks["royalty_lost"] = (tracks["bot_streams"] * SPOTIFY_RATE).round(0)
     return artists, tracks, genres, rw, charts
+
+
+def mask_low_confidence(df, reveal_conf, on, name_col="artist"):
+    """Name-surfacing guardrail: hide identities of low-confidence flags.
+
+    Anomaly ≠ proof of fraud, so unproven low-confidence artists should not be
+    publicly named. Below ``reveal_conf`` the name is replaced with an
+    anonymous placeholder.
+    """
+    if not on or "confidence" not in df.columns:
+        return df
+    df = df.copy()
+    masked = df["confidence"] < reveal_conf
+    df.loc[masked, name_col] = [f"🔒 Under review #{i + 1}" for i in range(int(masked.sum()))]
+    return df
 
 artists_df, tracks_df, genres_df, rw_df, charts_df = load_data()
 
@@ -43,11 +77,24 @@ selected_genre = st.sidebar.selectbox("Genre", genres)
 min_bot_pct = st.sidebar.slider("Min Bot %", 0, 100, 0)
 min_streams = st.sidebar.number_input("Min Total Streams", value=0, step=1_000_000)
 
+st.sidebar.divider()
+st.sidebar.subheader("🔍 Confidence & safeguards")
+min_conf = st.sidebar.slider("Min confidence", 0, 100, 0,
+                             help="Hide flags the model is not confident about.")
+guardrail_on = st.sidebar.checkbox(
+    "🔒 Mask names below a confidence threshold", value=True,
+    help="Ethics guardrail: anomaly is not proof of fraud, so low-confidence "
+         "artists are shown anonymously rather than publicly named.")
+reveal_conf = st.sidebar.slider("Reveal names at confidence ≥", 0, 100, 0,
+                                disabled=not guardrail_on)
+
 filtered = artists_df.copy()
 if selected_genre != "All Genres":
     filtered = filtered[filtered["genre_category"] == selected_genre]
 filtered = filtered[filtered["bot_pct"] >= min_bot_pct]
 filtered = filtered[filtered["total_streams"] >= min_streams]
+if "confidence" in filtered.columns:
+    filtered = filtered[filtered["confidence"] >= min_conf]
 filtered = filtered.sort_values("bot_pct", ascending=False)
 
 # ── TOP METRICS ──
@@ -221,7 +268,9 @@ with col1:
     st.metric("Avg Lost Per Artist", f"${filtered['royalty_lost'].mean():,.0f}")
 
 with col2:
-    top_royalty = filtered.nlargest(10, "royalty_lost")[["artist", "bot_streams", "royalty_lost"]]
+    top_royalty = mask_low_confidence(
+        filtered.nlargest(10, "royalty_lost"), reveal_conf, guardrail_on
+    )[["artist", "bot_streams", "royalty_lost"]]
     top_royalty["bot_streams"] = (top_royalty["bot_streams"]/1e6).round(1).astype(str) + "M"
     top_royalty["royalty_lost"] = top_royalty["royalty_lost"].apply(lambda x: f"${x:,.0f}")
     st.markdown("**Top 10 Artists by Estimated Royalties Lost**")
@@ -259,7 +308,15 @@ st.divider()
 
 # ── FULL LEADERBOARD ──
 st.subheader("🏆 Full Artist Leaderboard")
-display_df = filtered[["artist", "genre_category", "total_streams", "bot_streams", "bot_pct", "royalty_lost", "confidence", "flagged_days"]].rename(columns={
+if guardrail_on:
+    st.caption(f"🔒 Guardrail on — artists below confidence {reveal_conf} are shown anonymously.")
+
+lb_cols = ["artist", "genre_category", "total_streams", "bot_streams", "bot_pct",
+           "royalty_lost", "confidence", "flagged_days"]
+if "flag_reasons" in filtered.columns:      # explainability: why each artist was flagged
+    lb_cols.append("flag_reasons")
+leaderboard = mask_low_confidence(filtered, reveal_conf, guardrail_on)
+display_df = leaderboard[lb_cols].rename(columns={
     "artist": "Artist",
     "genre_category": "Genre",
     "total_streams": "Total Streams",
@@ -267,6 +324,7 @@ display_df = filtered[["artist", "genre_category", "total_streams", "bot_streams
     "bot_pct": "Bot %",
     "royalty_lost": "💰 Royalties Lost ($)",
     "confidence": "Confidence",
-    "flagged_days": "Flagged Days"
+    "flagged_days": "Flagged Days",
+    "flag_reasons": "Why flagged",
 })
 st.dataframe(display_df, use_container_width=True, hide_index=True)

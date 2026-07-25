@@ -1,0 +1,43 @@
+{
+  "caveat": "Chart data 2017-2021 vs purges ~2025; directional only.",
+  "score_col": "bot_pct",
+  "metrics": {
+    "n_artists": 470,
+    "documented_verified": 4,
+    "documented_present": 3,
+    "documented_absent": [
+      "Michael Smith"
+    ],
+    "precision_at_10": 0.0,
+    "recall_at_10": 0.0,
+    "precision_at_25": 0.0,
+    "recall_at_25": 0.0,
+    "precision_at_50": 0.02,
+    "recall_at_50": 0.333,
+    "median_percentile_of_positives": 71.9,
+    "roc_auc_bot_pct": 0.793
+  },
+  "positives": [
+    {
+      "artist": "BLACKPINK",
+      "rank": 132,
+      "percentile": 71.9,
+      "bot_pct": 2.5,
+      "confidence": 6.8
+    },
+    {
+      "artist": "BTS",
+      "rank": 133,
+      "percentile": 71.7,
+      "bot_pct": 2.5,
+      "confidence": 7.6
+    },
+    {
+      "artist": "Kendrick Lamar",
+      "rank": 34,
+      "percentile": 92.8,
+      "bot_pct": 7.6,
+      "confidence": 10.8
+    }
+  ]
+}

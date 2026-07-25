@@ -31,3 +31,11 @@ Spotify Global Chart 2024.xlsx
 
 # Empty / scratch API pulls
 spotify_real_data.csv
+
+# ── Generated build artifacts (reproducible via etl.py / run_pipeline.py) ──
+# Curated dataset built by etl.py:
+charts_us_global.parquet
+# Trained model (~90 MB; rebuild with run_pipeline.py):
+model.joblib
+*.joblib
+etl.log

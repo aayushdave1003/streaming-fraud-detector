@@ -41,7 +41,7 @@ against publicly documented, real-world stream-purge incidents.
                  │  streams                      │
                  └──────────────┬───────────────┘
                                 │
-                    fraud_analysis_v2.py  ← main pipeline
+                       run_pipeline.py  ← main pipeline
                                 │
         ┌───────────────────────┴───────────────────────┐
         │  Signal engineering (per artist+title, daily): │
@@ -79,22 +79,33 @@ against publicly documented, real-world stream-purge incidents.
 
 ## Repository layout
 
-| File | Role |
-|------|------|
-| `streaming_fraud_starter.py` | Prototype on **synthetic** session data (10k sessions) — engineers per-session behavioral features and runs a single Isolation Forest. Good place to understand the approach. Outputs `eda_plots.png`, `bot_percentage_per_artist.png`. |
-| `fraud_analysis.py` | First real-data pass on `charts_combined.csv` (single Isolation Forest). |
-| `fraud_analysis_v2.py` | **Main pipeline.** 5 engineered signals → Isolation Forest + LOF ensemble → track/artist stats, confidence scores, confounder post-processing. Outputs `fraud_results_tracks.csv`, `fraud_results_artists.csv`, `fraud_analysis.png`. |
-| `real_world_data.py` | Curated table of **publicly documented** stream-removal incidents (Kendrick Lamar, BTS, BLACKPINK, the Michael Smith AI-bot fraud case, etc.). Outputs `real_world_reports.csv`. |
-| `assign_genres.py` | Offline genre tagging via curated artist→genre lists (no API needed). |
-| `fetch_genres.py` | Online genre tagging via the Spotify Web API. |
-| `spotify_fetch.py` | Pulls audio features / top tracks for selected artists via the Spotify API. |
-| `debug_spotify.py` | Minimal Spotify API connectivity check. |
-| `app.py` | **Streamlit dashboard** tying the result CSVs together. |
+The core pipeline is a set of small, testable modules:
+
+| Module | Role |
+|--------|------|
+| `config.py` | **Every tunable in one place** — regions, contamination, thresholds, confidence weights, confounder lists, paths. |
+| `signals.py` | **Signal engineering** as pure, unit-testable functions with `retrospective` vs. `live` modes (look-ahead is disallowed live). |
+| `models.py` | `EnsembleDetector` — Isolation Forest + LOF, flag only if both agree; joblib-persistable; out-of-sample scoring for new data. |
+| `etl.py` | Chunked, bounded-memory build of the curated Parquet from the raw charts CSV. |
+| `run_pipeline.py` | **The single entry point.** Load → signals → ensemble → track/artist stats + confidence + `flag_reasons` + confounder post-processing. Also `--score` for incremental scoring. |
+| `evaluate.py` | Validate output against documented purges (`real_world_reports.csv`) — precision/recall@k, percentile, ROC-AUC (see caveat). |
+| `tune.py` | Contamination sensitivity sweep → `tune_contamination.png/.csv`. |
+| `app.py` | **Streamlit dashboard** — genre browser, stream timelines, royalty calculator, explainability, confidence controls, name-surfacing guardrail. |
+| `tests/test_signals.py` | `pytest` suite (14 tests) for signals, look-ahead boundary, model persistence. |
+
+Supporting scripts: `streaming_fraud_starter.py` (synthetic-data prototype),
+`real_world_data.py` (curated incidents), `assign_genres.py` / `fetch_genres.py`
+(genre tagging, offline / Spotify API), `spotify_fetch.py`, `debug_spotify.py`.
+
+> `fraud_analysis.py` (v1) was retired and `fraud_analysis_v2.py` is now a thin
+> shim that forwards to `run_pipeline.py`. See [ROADMAP.md](ROADMAP.md).
 
 ### Committed outputs (so the dashboard runs out of the box)
-`fraud_results_artists.csv`, `fraud_results_tracks.csv`, `fraud_results_all_artists.csv`,
-`artist_genres.csv`, `artist_genre_lookup.csv`, `real_world_reports.csv`, and the generated
-`.png` charts.
+`fraud_results_artists.csv`, `fraud_results_tracks.csv`, `artist_genres.csv`,
+`real_world_reports.csv`, `eval_report.json`, `tune_contamination.csv`, and the
+generated `.png` charts. The curated `charts_us_global.parquet` and the trained
+`model.joblib` (~90 MB) are gitignored — rebuild them with `etl.py` /
+`run_pipeline.py`.
 
 ---
 
@@ -142,23 +153,39 @@ The `.env` file is gitignored — **never commit real credentials.**
 ## Running it
 
 ```bash
-# Explore the approach on synthetic data (no external data needed)
-python streaming_fraud_starter.py
+# 0. (once) build the curated, columnar dataset from the raw charts CSV
+python etl.py                       # charts_combined.csv -> charts_us_global.parquet
 
-# Build the curated real-world incidents table
+# 1. run the main ensemble pipeline
+python run_pipeline.py              # full run on the curated parquet
+python run_pipeline.py --sample 50000          # quick dev run
+python run_pipeline.py --contamination 0.02    # override the anomaly rate
+python run_pipeline.py --mode live             # drop look-ahead signals
+
+# 2. validate against documented real-world purges
+python evaluate.py
+
+# 3. justify the contamination choice (sensitivity sweep)
+python tune.py
+
+# 4. score NEW chart data with the saved model (no refit)
+python run_pipeline.py --score new_day.csv
+
+# tag genres (offline, no API)  ...or online via Spotify API
+python assign_genres.py            # / python fetch_genres.py
+
+# curated real-world incidents table
 python real_world_data.py
 
-# Run the main ensemble pipeline (requires charts_combined.csv — see Data)
-python fraud_analysis_v2.py
+# run the tests
+pytest -q
 
-# Tag genres (offline, no API)
-python assign_genres.py
-#   ...or online via Spotify API:
-python fetch_genres.py
-
-# Launch the dashboard
+# launch the dashboard (degrades gracefully without the big data file)
 streamlit run app.py
 ```
+
+No raw data? The committed result CSVs let the dashboard and `evaluate.py` /
+`tune.py` run without the multi-GB source; only steps 0–1 need it.
 
 ---
 
@@ -189,8 +216,9 @@ looks anomalous but isn't fraud.
 
 ## Tech stack
 
-Python · pandas · NumPy · scikit-learn (IsolationForest, LocalOutlierFactor) · Streamlit · Plotly ·
-matplotlib/seaborn · Spotipy (Spotify Web API).
+Python · pandas · NumPy · scikit-learn (IsolationForest, LocalOutlierFactor) · joblib (model
+persistence) · PyArrow (Parquet) · Streamlit · Plotly · matplotlib/seaborn · Spotipy (Spotify Web
+API) · pytest.
 
 ---
 
