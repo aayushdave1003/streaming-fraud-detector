@@ -73,10 +73,20 @@ now lives.
   the causality unit test now covers `seasonal_spike` too. `retrospective` keeps
   the full-month mean for batch audits.
 
+- [x] **Injected-anomaly benchmark.** `benchmark.py` plants known synthetic bot
+  boosts into real series and measures day- and track-level **recall** across
+  boost magnitudes (`benchmark_injection.png/.csv`) — a controllable day-level
+  ground-truth proxy complementing the artist-level purge validation.
+  *Finding: recall rises monotonically with boost (track-recall 0.06 → 0.32 from
+  1.5× → 8×) but stays modest — the conservative AND-ensemble at 0.02
+  contamination trades recall for precision, and a single injected spike is hard
+  to separate from organic virality in chart data. An honest limitation, not a
+  win to oversell.*
+
 ## Next (not yet done)
 
-- Track/day-level ground truth for a stronger benchmark than artist-level (the
-  8 documented incidents are artist-level and temporally offset).
+- **Real** track/day-level ground truth (hand-labeled) — the injected benchmark
+  is a proxy; the 8 documented incidents are artist-level and temporally offset.
 - Data-scope decision: keep US + Global, or regenerate from the full raw
   `charts.csv` (all regions).
 - Backfill genres via the Spotify API (`fetch_genres.py`) — currently blocked:

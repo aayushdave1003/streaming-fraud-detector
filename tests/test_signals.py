@@ -210,3 +210,17 @@ def test_release_confounder_below_threshold_keeps_all():
     # Only 1 of 5 flags in-window (share 0.2 < 0.6) -> nothing cleared.
     out = run_pipeline.apply_release_confounder(_flagged_track("A", "Mixed", 30, [3, 18, 19, 20, 21]))
     assert out["ensemble_bot"].sum() == 5
+
+
+# ── Injected-anomaly benchmark ──────────────────────────────────────────
+def test_inject_labels_and_boosts():
+    import benchmark
+    dates = pd.date_range("2020-01-01", periods=60, freq="D")
+    daily = signals.aggregate_daily(
+        pd.DataFrame({"artist": "A", "title": "T", "date": dates, "streams": [100.0] * 60})
+    )
+    inj, chosen = benchmark.inject(daily, n_tracks=1, window=5, boost=4.0, rng=np.random.default_rng(0))
+    assert inj["is_injected"].sum() == 5           # exactly one 5-day window labeled
+    assert chosen == [("A", "T")]
+    assert (inj.loc[inj["is_injected"] == 1, "streams"] == 400.0).all()   # boosted 4x
+    assert (inj.loc[inj["is_injected"] == 0, "streams"] == 100.0).all()   # rest untouched

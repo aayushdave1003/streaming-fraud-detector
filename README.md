@@ -188,6 +188,9 @@ python evaluate.py
 # 3. justify the contamination choice (sensitivity sweep)
 python tune.py
 
+# 3b. injected-anomaly recall benchmark (plants known bots, measures recall)
+python benchmark.py
+
 # 4. score NEW chart data with the saved model (no refit)
 python run_pipeline.py --score new_day.csv
 
