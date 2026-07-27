@@ -224,3 +224,15 @@ def test_inject_labels_and_boosts():
     assert chosen == [("A", "T")]
     assert (inj.loc[inj["is_injected"] == 1, "streams"] == 400.0).all()   # boosted 4x
     assert (inj.loc[inj["is_injected"] == 0, "streams"] == 100.0).all()   # rest untouched
+
+
+def test_inject_plateau_is_flat_elevated():
+    import benchmark
+    dates = pd.date_range("2020-01-01", periods=60, freq="D")
+    daily = signals.aggregate_daily(
+        pd.DataFrame({"artist": "A", "title": "T", "date": dates, "streams": [100.0] * 60})
+    )
+    inj, _ = benchmark.inject(daily, 1, 5, 4.0, np.random.default_rng(0), pattern="plateau")
+    win = inj.loc[inj["is_injected"] == 1, "streams"]
+    assert win.nunique() == 1                     # flat -> low variance (plateau signal)
+    assert win.iloc[0] == pytest.approx(400.0)    # 4x the 100-mean baseline

@@ -73,15 +73,19 @@ now lives.
   the causality unit test now covers `seasonal_spike` too. `retrospective` keeps
   the full-month mean for batch audits.
 
-- [x] **Injected-anomaly benchmark.** `benchmark.py` plants known synthetic bot
-  boosts into real series and measures day- and track-level **recall** across
-  boost magnitudes (`benchmark_injection.png/.csv`) — a controllable day-level
-  ground-truth proxy complementing the artist-level purge validation.
-  *Finding: recall rises monotonically with boost (track-recall 0.06 → 0.32 from
-  1.5× → 8×) but stays modest — the conservative AND-ensemble at 0.02
-  contamination trades recall for precision, and a single injected spike is hard
-  to separate from organic virality in chart data. An honest limitation, not a
-  win to oversell.*
+- [x] **Injected-anomaly benchmark.** `benchmark.py` plants known bot windows in
+  real series and measures day/track **recall** — a controllable day-level
+  ground-truth proxy. Two injection patterns (spike / flat plateau) across a
+  boost sweep (`benchmark_boost.png`) and a contamination sweep
+  (`benchmark_contamination.png`).
+  *Findings: (1) recall rises with boost but stays modest at the default
+  (track-recall ~0.25–0.32 at 5–8×) — an injected spike is hard to separate from
+  organic virality; the flat-plateau pattern edges out the spike at subtle
+  boosts, confirming the low-variance signal earns its keep. (2) The
+  contamination sweep makes the tradeoff explicit: recall climbs 0.17 → 0.57 as
+  contamination goes 0.01 → 0.12, while flagged load rises 0.1% → 3.3% and
+  precision falls — so 0.02 is a deliberate precision choice and recall is a
+  dial, not a ceiling.*
 
 ## Next (not yet done)
 
