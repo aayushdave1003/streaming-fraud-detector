@@ -55,9 +55,20 @@ def add_drop_after_spike(daily: pd.DataFrame) -> pd.DataFrame:
     return daily
 
 
-def add_seasonal(daily: pd.DataFrame) -> pd.DataFrame:
-    """Seasonal correction: streams vs the artist's average for that month."""
-    monthly_avg = daily.groupby(["artist", "month"])["streams"].transform("mean")
+def add_seasonal(daily: pd.DataFrame, mode: str = "retrospective") -> pd.DataFrame:
+    """Seasonal correction: streams vs the artist's average for that month.
+
+    Retrospective uses the full-month mean (peeks within the month — fine for a
+    batch audit). Live uses a *causal* expanding mean of the artist's same-month
+    streams up to each date, so a day's signal never depends on the future.
+    """
+    if mode == "live":
+        d = daily.sort_values(["artist", "month", "date"])
+        cum = d.groupby(["artist", "month"])["streams"].cumsum()
+        cnt = d.groupby(["artist", "month"]).cumcount() + 1
+        monthly_avg = (cum / cnt).reindex(daily.index)
+    else:
+        monthly_avg = daily.groupby(["artist", "month"])["streams"].transform("mean")
     daily["seasonal_spike"] = daily["streams"] / monthly_avg.replace(0, np.nan)
     return daily
 
@@ -98,7 +109,7 @@ def engineer_signals(daily: pd.DataFrame, mode: str = "retrospective",
                      weekend: bool = False) -> pd.DataFrame:
     """Run the full signal stack for a given mode and drop unusable rows."""
     daily = add_velocity(daily)
-    daily = add_seasonal(daily)
+    daily = add_seasonal(daily, mode)
     daily = add_plateau(daily)
     if mode == "retrospective":
         daily = add_drop_after_spike(daily)

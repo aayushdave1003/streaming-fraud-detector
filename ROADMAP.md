@@ -10,9 +10,10 @@ now lives.
   against the documented purges in `real_world_reports.csv` using rank-based
   metrics (precision/recall@k, median percentile, ROC-AUC), with an explicit
   temporal caveat (chart data is 2017–2021; purges are ~2025).
-  *Result on the current data (contamination 0.02): ROC-AUC ≈ 0.87 by `bot_pct`;
-  Kendrick Lamar (top 5%), BTS, and BLACKPINK all rank above the median;
-  Michael Smith is correctly absent (independent artist, never charted).*
+  *Result on the current data (contamination 0.02, with the confounders below):
+  ROC-AUC ≈ 0.94 by `bot_pct`; Kendrick Lamar, BTS, and BLACKPINK rank in the
+  top ~7% (median percentile 93); Michael Smith is correctly absent (independent
+  artist, never charted).*
 - [x] **Per-flag explainability.** The pipeline tags every flagged day with the
   signals that fired (`signals.add_reason_flags`) and rolls them up into a
   `flag_reasons` column on both result tables; the dashboard shows a
@@ -60,14 +61,24 @@ now lives.
   reclassified as legitimate and confidence is down-weighted with a 🎄 note
   (unit-tested). This removed Wham!, Michael Bublé, and other Christmas-catalog
   acts from the top of the leaderboard. Death/tribute spikes are handled the
-  same way. *Still open:* release-week and viral/playlist spikes (see "Next").
+  same way.
+- [x] **Release-window / viral-debut confounder.** `run_pipeline.apply_release_confounder`
+  clears a track's flags when they fall overwhelmingly (≥60%) inside its first
+  `RELEASE_WINDOW_DAYS` (14) on the chart — a launch/viral ramp, not fraud —
+  before aggregation, so track and artist counts stay consistent (🚀 note,
+  unit-tested). Cleared **293 launch-ramp tracks** and lifted validation from
+  **AUC 0.87 → 0.94** (documented-artist median percentile 86 → 93).
+- [x] **Causal seasonal signal.** `signals.add_seasonal` now branches on mode:
+  `live` uses a causal expanding within-month mean (no peeking at later days), so
+  the causality unit test now covers `seasonal_spike` too. `retrospective` keeps
+  the full-month mean for batch audits.
 
 ## Next (not yet done)
 
-- Release-week and viral/playlist spike confounders (needs an external signal).
-- Track/day-level ground truth for a stronger benchmark than artist-level.
-- A true causal seasonal signal (the monthly-average term still uses
-  within-month information; fine for retrospective audits, not for strict live
-  scoring).
-- Backfill genres via the Spotify API (`fetch_genres.py`) instead of the offline
-  curated lists in `assign_genres.py`.
+- Track/day-level ground truth for a stronger benchmark than artist-level (the
+  8 documented incidents are artist-level and temporally offset).
+- Data-scope decision: keep US + Global, or regenerate from the full raw
+  `charts.csv` (all regions).
+- Backfill genres via the Spotify API (`fetch_genres.py`) — currently blocked:
+  Spotify deprecated the artist `genres` field, so `assign_genres.py` (offline)
+  remains the source.

@@ -82,6 +82,15 @@ HOLIDAY_FLAG_SHARE_THRESHOLD = 0.6
 HOLIDAY_CONF_MULT = 0.3
 HOLIDAY_NOTE = "🎄 Holiday-seasonal spike — likely legitimate, not fraud"
 
+# Release-window / viral-debut confounder. A track's first days on the chart
+# ramp hard (launch or viral moment), which the velocity/seasonal signals flag.
+# When a track's flags are overwhelmingly inside this window, the "anomaly" is
+# the launch, not bots — clear them. A bot-boosted launch keeps flagging past
+# the window, so its in-window share stays low and it is left untouched.
+RELEASE_WINDOW_DAYS = 14
+RELEASE_FLAG_SHARE_THRESHOLD = 0.6
+RELEASE_NOTE = "🚀 Release-window ramp — likely legitimate launch, not fraud"
+
 # ── Collab splitting (artist-level attribution) ─────────────────────────
 COLLAB_SPLIT_REGEX = r",\s*|\s*&\s*|\s*ft\.?\s*|\s*feat\.?\s*"
 

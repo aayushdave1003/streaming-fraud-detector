@@ -10,34 +10,34 @@
     ],
     "precision_at_10": 0.0,
     "recall_at_10": 0.0,
-    "precision_at_25": 0.0,
-    "recall_at_25": 0.0,
-    "precision_at_50": 0.02,
-    "recall_at_50": 0.333,
-    "median_percentile_of_positives": 74.3,
-    "roc_auc_bot_pct": 0.808
+    "precision_at_25": 0.04,
+    "recall_at_25": 0.333,
+    "precision_at_50": 0.04,
+    "recall_at_50": 0.667,
+    "median_percentile_of_positives": 93.4,
+    "roc_auc_bot_pct": 0.935
   },
   "positives": [
     {
       "artist": "BLACKPINK",
-      "rank": 121,
-      "percentile": 74.3,
-      "bot_pct": 2.5,
-      "confidence": 6.8
+      "rank": 31,
+      "percentile": 93.4,
+      "bot_pct": 0.8,
+      "confidence": 6.5
     },
     {
       "artist": "BTS",
-      "rank": 123,
-      "percentile": 73.8,
-      "bot_pct": 2.5,
-      "confidence": 7.6
+      "rank": 56,
+      "percentile": 88.1,
+      "bot_pct": 0.3,
+      "confidence": 7.2
     },
     {
       "artist": "Kendrick Lamar",
-      "rank": 31,
-      "percentile": 93.4,
-      "bot_pct": 7.6,
-      "confidence": 10.8
+      "rank": 11,
+      "percentile": 97.7,
+      "bot_pct": 1.6,
+      "confidence": 9.9
     }
   ]
 }

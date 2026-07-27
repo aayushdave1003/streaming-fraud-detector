@@ -74,6 +74,30 @@ def apply_holiday_confounder(artist: pd.DataFrame) -> pd.DataFrame:
     return artist
 
 
+def apply_release_confounder(daily: pd.DataFrame) -> pd.DataFrame:
+    """Clear launch-window ramp flags (release / viral debut), which aren't fraud.
+
+    Runs on the daily frame *before* aggregation so both track- and artist-level
+    counts stay consistent. For each track, if the share of its flagged days that
+    fall inside the first ``RELEASE_WINDOW_DAYS`` on the chart is high enough, those
+    in-window flags are the launch, not bots — un-flag them. Adds a per-row
+    ``release_adjusted`` marker for downstream notes. Conservative by design: a
+    genuinely bot-boosted launch keeps flagging past the window, lowering its share.
+    """
+    daily = daily.sort_values(["artist", "title", "date"]).reset_index(drop=True)
+    days_on_chart = daily.groupby(signals.GROUP).cumcount()
+    in_window = (days_on_chart < config.RELEASE_WINDOW_DAYS).astype(int)
+    daily["_rw_flag"] = daily["ensemble_bot"] * in_window
+    total_flagged = daily.groupby(signals.GROUP)["ensemble_bot"].transform("sum")
+    rel_flagged = daily.groupby(signals.GROUP)["_rw_flag"].transform("sum")
+    share = (rel_flagged / total_flagged.replace(0, np.nan)).fillna(0)
+    adjusted = (share >= config.RELEASE_FLAG_SHARE_THRESHOLD) & (total_flagged > 0)
+    daily["release_adjusted"] = adjusted.astype(int)
+    reclassify = adjusted & (in_window == 1) & (daily["ensemble_bot"] == 1)
+    daily.loc[reclassify, "ensemble_bot"] = 0
+    return daily.drop(columns=["_rw_flag"])
+
+
 def track_level(daily: pd.DataFrame) -> pd.DataFrame:
     track = daily.groupby(signals.GROUP).agg(
         total_streams=("streams", "sum"),
@@ -83,6 +107,7 @@ def track_level(daily: pd.DataFrame) -> pd.DataFrame:
         max_spike_ratio=("spike_ratio", "max"),
         avg_rolling_cv=("rolling_cv", "mean"),
         drop_after_spike_count=("drop_after_spike", "sum"),
+        release_adjusted=("release_adjusted", "max"),
         **_REASON_AGG,
     ).reset_index()
     track["bot_pct"] = (track["bot_streams"] / track["total_streams"] * 100).round(1)
@@ -91,7 +116,8 @@ def track_level(daily: pd.DataFrame) -> pd.DataFrame:
         track["max_spike_ratio"], track["drop_after_spike_count"],
     )
     track["flag_reasons"] = track.apply(signals.summarise_reasons, axis=1)
-    return track.drop(columns=list(signals.REASON_COLUMNS))
+    track["note"] = np.where(track["release_adjusted"] == 1, config.RELEASE_NOTE, "")
+    return track.drop(columns=list(signals.REASON_COLUMNS) + ["release_adjusted"])
 
 
 def artist_level(daily: pd.DataFrame) -> pd.DataFrame:
@@ -187,6 +213,7 @@ def run(data: str = config.CURATED_PARQUET, mode: str = "retrospective",
     det = EnsembleDetector(contamination=contamination)
     iso_bot, lof_bot, ensemble = det.fit_predict_batch(X)
     daily["iso_bot"], daily["lof_bot"], daily["ensemble_bot"] = iso_bot, lof_bot, ensemble
+    daily = apply_release_confounder(daily)  # clear launch-ramp flags before counting
     daily["bot_stream_val"] = daily["streams"] * daily["ensemble_bot"]
     daily = signals.add_reason_flags(daily, "ensemble_bot")
     daily["holiday_window"] = daily["month"].isin(config.HOLIDAY_MONTHS).astype(int)

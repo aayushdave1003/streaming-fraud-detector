@@ -83,7 +83,7 @@ def test_live_features_are_causal():
     truncated = signals.engineer_signals(
         signals.aggregate_daily(make_track(s[:-1])), mode="live"
     )
-    causal = ["pct_change", "spike_ratio", "rolling_cv"]
+    causal = ["pct_change", "spike_ratio", "rolling_cv", "seasonal_spike"]
     merged = full.merge(truncated, on="date", suffixes=("_full", "_trunc"))
     for col in causal:
         a = merged[f"{col}_full"].to_numpy()
@@ -182,3 +182,31 @@ def test_holiday_confounder_leaves_year_round_artist_untouched():
     assert out.loc[0, "bot_pct"] == 50.0
     assert out.loc[0, "confidence"] == 70.0
     assert out.loc[0, "note"] == ""
+
+
+# ── Release-window confounder ───────────────────────────────────────────
+def _flagged_track(artist, title, n, flagged_idx):
+    dates = pd.date_range("2020-01-01", periods=n, freq="D")
+    eb = [1 if i in flagged_idx else 0 for i in range(n)]
+    return pd.DataFrame({"artist": artist, "title": title, "date": dates,
+                         "ensemble_bot": eb, "streams": [100.0] * n})
+
+
+def test_release_confounder_clears_launch_ramp():
+    # All flags land in the first 14 days on chart -> reclassified as a launch ramp.
+    out = run_pipeline.apply_release_confounder(_flagged_track("A", "Launch", 30, [0, 1, 2, 3]))
+    assert out["ensemble_bot"].sum() == 0
+    assert (out["release_adjusted"] == 1).all()
+
+
+def test_release_confounder_keeps_sustained_flags():
+    # Flags well outside the release window -> left untouched.
+    out = run_pipeline.apply_release_confounder(_flagged_track("A", "Sustained", 30, [20, 21, 22, 23]))
+    assert out["ensemble_bot"].sum() == 4
+    assert (out["release_adjusted"] == 0).all()
+
+
+def test_release_confounder_below_threshold_keeps_all():
+    # Only 1 of 5 flags in-window (share 0.2 < 0.6) -> nothing cleared.
+    out = run_pipeline.apply_release_confounder(_flagged_track("A", "Mixed", 30, [3, 18, 19, 20, 21]))
+    assert out["ensemble_bot"].sum() == 5
