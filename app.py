@@ -67,7 +67,7 @@ artists_df, tracks_df, genres_df, rw_df, charts_df = load_data()
 
 # ── HEADER ──
 st.title("🎵 Spotify Stream Fraud Detector")
-st.markdown("Detecting bot-driven stream manipulation using anomaly detection on 26M+ real Spotify chart entries.")
+st.markdown("Detecting bot-driven stream manipulation using anomaly detection on 16M+ real Spotify chart rows.")
 st.divider()
 
 # ── SIDEBAR ──

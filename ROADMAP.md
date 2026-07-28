@@ -25,10 +25,11 @@ now lives.
 - [x] **Justify / tune the anomaly rate.** All constants moved to `config.py`.
   `tune.py` sweeps `contamination` and reports the effect on flagged fraction
   and documented-artist ranks (`tune_contamination.png/.csv`).
-  *Finding: lower contamination ranks the documented artists higher — so the
-  default was changed from 0.03 to **0.02** (median percentile 78→86, AUC
-  0.80→0.87). 0.01 is tighter still (~91 / ~0.89) but flags very little; 0.02 is
-  the balance point.*
+  *Finding: lower contamination ranks the documented artists higher, so the
+  default was changed from 0.03 to **0.02** — which (with the confounders below)
+  peaks the documented-artist median percentile at 93 with AUC 0.94. 0.01 nudges
+  AUC to ~0.94 but flags almost nothing (0.07% of days); 0.02 is the balance
+  point.*
 
 ## Tier 2 — A pipeline, not 3 scripts
 
