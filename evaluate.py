@@ -44,7 +44,8 @@ def positives_present(results: pd.DataFrame, real_world: pd.DataFrame):
 
 def evaluate(results_path: str = config.RESULTS_ARTISTS,
              real_world_path: str = config.REAL_WORLD,
-             score_col: str = "bot_pct") -> dict:
+             score_col: str = "bot_pct",
+             write_report: bool = True, quiet: bool = False) -> dict:
     results = pd.read_csv(results_path)
     real_world = pd.read_csv(real_world_path)
     results["_norm"] = results["artist"].map(normalize)
@@ -96,10 +97,12 @@ def evaluate(results_path: str = config.RESULTS_ARTISTS,
     report = {"caveat": "Chart data 2017-2021 vs purges ~2025; directional only.",
               "score_col": score_col, "metrics": metrics, "positives": per_artist}
 
-    with open(config.EVAL_REPORT, "w") as f:
-        json.dump(report, f, indent=2)
+    if write_report:  # tune.py passes write_report=False so its sweep can't clobber the canonical report
+        with open(config.EVAL_REPORT, "w") as f:
+            json.dump(report, f, indent=2)
 
-    _print_report(report)
+    if not quiet:
+        _print_report(report)
     return report
 
 

@@ -191,6 +191,10 @@ python tune.py
 # 3b. injected-anomaly recall benchmark (plants known bots, measures recall)
 python benchmark.py
 
+# 3c. hand-labeling harness — export candidates, label them, score real ground truth
+python labeling.py export     # fill the label column of labels_template.csv -> labels.csv
+python labeling.py score
+
 # 4. score NEW chart data with the saved model (no refit)
 python run_pipeline.py --score new_day.csv
 
@@ -223,17 +227,31 @@ history rather than a global average:
 - **Weekend ratio** — humans skew toward weekends; flat 24/7 activity is suspicious.
 - **Plateau (rolling CV)** — unnaturally low variance in daily streams.
 
-Features are standardized, then **Isolation Forest** (`contamination=0.03`) and **Local Outlier
-Factor** (`n_neighbors=20`) each flag ~3% of records. A record is called a "bot day" only when
-**both** models agree — a deliberately conservative ensemble.
+Features are standardized, then **Isolation Forest** (`contamination=0.02`) and **Local Outlier
+Factor** (`n_neighbors=20`) each flag ~2% of records. A record is called a "bot day" only when
+**both** models agree — a deliberately conservative ensemble (the `0.02` default is justified by the
+sweep in `tune.py` — it peaks the documented-artist median percentile). In **live** mode the
+look-ahead pieces (drop-after-spike, and the within-month seasonal mean) are swapped for causal
+versions so a day's score never depends on the future.
 
 **Confidence score (0–100)** blends: share of a track's days flagged, peak spike magnitude, and how
 often spikes were followed by drop-offs.
 
-**Confounder handling.** Christmas-catalog artists are excluded, artists need ≥90 days of data and
-≥2 active years to qualify, and known artist-death tribute spikes (e.g. Mac Miller, Juice WRLD,
-XXXTENTACION) have their confidence sharply reduced and annotated — because grief-driven streaming
-looks anomalous but isn't fraud.
+**Confounder handling** — legitimate spikes are reclassified *before* aggregation, so track and
+artist totals stay consistent:
+- **Holiday seasonality** — when ≥60% of an artist's flagged days fall in Nov–Dec, those flags are
+  the Christmas catalog, not fraud (generalizes the old hardcoded name allowlist; 🎄 note).
+- **Release / viral ramp** — when ≥60% of a track's flags fall in its first 14 days on the chart,
+  that's the launch, not bots (🚀 note). Cleared ~293 launch-ramp tracks.
+- **Death/tribute spikes** — known artist-death dates (Mac Miller, Juice WRLD, XXXTENTACION…) have
+  their confidence sharply reduced and annotated, since grief-driven streaming looks anomalous but
+  isn't fraud.
+- Artists also need ≥90 days of data and ≥2 active years to qualify.
+
+**Validation.** `evaluate.py` ranks the output against documented real-world purges (ROC-AUC ≈ 0.94,
+with a 2017–2021-vs-2025 temporal caveat); `benchmark.py` plants known synthetic bot boosts and
+measures day/track recall across boost magnitudes and contamination (recall is a tunable dial, not a
+ceiling — see ROADMAP).
 
 ---
 

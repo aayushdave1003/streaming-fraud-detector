@@ -23,8 +23,14 @@ USECOLS = ["title", "date", "artist", "region", "streams"]
 def build(raw: str = config.RAW_CHARTS,
           out: str = config.CURATED_PARQUET,
           regions: list[str] | None = None,
-          chunksize: int = 500_000) -> pd.DataFrame:
-    """Filter ``raw`` to ``regions`` in chunks and write ``out`` (parquet or csv)."""
+          chunksize: int = 500_000,
+          all_regions: bool = False) -> pd.DataFrame:
+    """Filter ``raw`` to ``regions`` in chunks and write ``out`` (parquet or csv).
+
+    ``all_regions=True`` keeps every country chart and drops only ``Global`` —
+    that row is itself an aggregate of the countries, so keeping it would
+    double-count worldwide streams.
+    """
     regions = regions or config.REGIONS
     kept: list[pd.DataFrame] = []
     total = 0
@@ -35,7 +41,7 @@ def build(raw: str = config.RAW_CHARTS,
         parse_dates=["date"],
     ):
         total += len(chunk)
-        chunk = chunk[chunk["region"].isin(regions)]
+        chunk = chunk[chunk["region"] != "Global"] if all_regions else chunk[chunk["region"].isin(regions)]
         chunk = chunk.dropna(subset=["streams"])
         if len(chunk):
             kept.append(chunk)
@@ -57,8 +63,10 @@ def main() -> None:
     p.add_argument("--out", default=config.CURATED_PARQUET)
     p.add_argument("--regions", nargs="+", default=None)
     p.add_argument("--chunksize", type=int, default=500_000)
+    p.add_argument("--all-regions", action="store_true",
+                   help="Keep every country chart (drop only the double-counting Global aggregate).")
     args = p.parse_args()
-    build(args.raw, args.out, args.regions, args.chunksize)
+    build(args.raw, args.out, args.regions, args.chunksize, args.all_regions)
 
 
 if __name__ == "__main__":

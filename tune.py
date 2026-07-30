@@ -38,7 +38,7 @@ def sweep(data: str = config.CURATED_PARQUET, values=None, sample=None):
             )
             flagged_frac = float(track["flagged_days"].sum() / track["total_days"].sum()) if len(track) else 0.0
             apath = os.path.join(tmp, os.path.basename(config.RESULTS_ARTISTS))
-            report = ev.evaluate(apath, config.REAL_WORLD)
+            report = ev.evaluate(apath, config.REAL_WORLD, write_report=False, quiet=True)
             m = report["metrics"]
             rows.append({
                 "contamination": c,

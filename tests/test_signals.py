@@ -236,3 +236,18 @@ def test_inject_plateau_is_flat_elevated():
     win = inj.loc[inj["is_injected"] == 1, "streams"]
     assert win.nunique() == 1                     # flat -> low variance (plateau signal)
     assert win.iloc[0] == pytest.approx(400.0)    # 4x the 100-mean baseline
+
+
+# ── Hand-labeling harness ───────────────────────────────────────────────
+def test_labeling_score_metrics():
+    import labeling
+    # bot&flagged=tp, bot¬flagged=fn, legit¬flagged=tn, legit&flagged=fp, unsure excluded
+    df = pd.DataFrame({
+        "label": ["bot", "bot", "legit", "legit", "unsure"],
+        "flagged_days": [3, 0, 0, 2, 5],
+        "bot_pct": [10.0, 0.0, 0.0, 1.0, 8.0],
+    })
+    m = labeling._score_labels(df)
+    assert m["labeled"] == 4
+    assert (m["tp"], m["fp"], m["fn"], m["tn"]) == (1, 1, 1, 1)
+    assert m["precision"] == 0.5 and m["recall"] == 0.5
