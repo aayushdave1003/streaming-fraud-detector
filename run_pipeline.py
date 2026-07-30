@@ -27,12 +27,12 @@ from models import EnsembleDetector
 
 
 # ── Loading ─────────────────────────────────────────────────────────────
-def load_data(path: str, sample: int | None = None) -> pd.DataFrame:
+def load_data(path: str, sample: int | None = None, all_regions: bool = False) -> pd.DataFrame:
     if path.endswith(".parquet"):
         df = pd.read_parquet(path)
     else:
         df = pd.read_csv(path, parse_dates=["date"])
-    if "region" in df.columns:
+    if "region" in df.columns and not all_regions:
         df = df[df["region"].isin(config.REGIONS)].copy()
     df = df.dropna(subset=["streams"])
     if sample:
@@ -196,13 +196,14 @@ def make_plot(artist: pd.DataFrame, path: str) -> None:
 # ── Orchestration ───────────────────────────────────────────────────────
 def run(data: str = config.CURATED_PARQUET, mode: str = "retrospective",
         sample: int | None = None, contamination: float = config.CONTAMINATION,
-        output_dir: str = ".", save_model: bool = True, quiet: bool = False):
+        output_dir: str = ".", save_model: bool = True, quiet: bool = False,
+        all_regions: bool = False):
     def say(*a):
         if not quiet:
             print(*a)
 
     say(f"📂 Loading {data} ...")
-    df = load_data(data, sample)
+    df = load_data(data, sample, all_regions)
     say(f"✅ Rows (US/Global): {len(df):,}")
 
     daily = signals.aggregate_daily(df)
@@ -269,6 +270,8 @@ def main() -> None:
     p.add_argument("--sample", type=int, default=None)
     p.add_argument("--contamination", type=float, default=config.CONTAMINATION)
     p.add_argument("--output-dir", default=".")
+    p.add_argument("--all-regions", action="store_true",
+                   help="Score every country chart (the all-regions parquet from etl.py --all-regions).")
     p.add_argument("--no-save-model", action="store_true")
     p.add_argument("--score", metavar="NEW_DATA", default=None,
                    help="Score NEW chart data with the saved model instead of training.")
@@ -280,7 +283,7 @@ def main() -> None:
         return
     run(data=args.data, mode=args.mode or "retrospective", sample=args.sample,
         contamination=args.contamination, output_dir=args.output_dir,
-        save_model=not args.no_save_model)
+        save_model=not args.no_save_model, all_regions=args.all_regions)
 
 
 if __name__ == "__main__":
