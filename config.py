@@ -91,6 +91,25 @@ RELEASE_WINDOW_DAYS = 14
 RELEASE_FLAG_SHARE_THRESHOLD = 0.6
 RELEASE_NOTE = "🚀 Release-window ramp — likely legitimate launch, not fraud"
 
+# One-off / event-spike confounder. Bot campaigns sustain or recur; an organic
+# event (a sync, a meme, a TV appearance, an artist's death) is a single short
+# burst in an otherwise-flat multi-year history. When ALL of an artist's flagged
+# days fall inside a <= ONEOFF_WINDOW_DAYS span yet they charted across
+# >= ONEOFF_MIN_CAREER_DAYS, treat it as an event, not fraud. Generalizes the
+# hardcoded DEATH_SPIKES list and catches international virality (e.g. Jessie J's
+# 2018 China-TV spike, The Cranberries after Dolores O'Riordan's death) without
+# region-specific rules.
+ONEOFF_WINDOW_DAYS = 45
+ONEOFF_MIN_CAREER_DAYS = 365
+# Require a SUSTAINED burst (this many flagged days inside the window). Without
+# it, an artist with just 1–2 sparse flags in a long career gets wrongly cleared
+# — which on sparse data (US+Global) is exactly the small real signal we
+# validate on (e.g. BTS has only 2 flagged US/Global days). A real event burst
+# (Jessie J's weeks-long China-TV spike) flags many days; sparse noise does not.
+ONEOFF_MIN_FLAGGED_DAYS = 8
+ONEOFF_CONF_MULT = 0.2
+ONEOFF_NOTE = "⚡ One-off event spike (viral/sync/tribute) — likely legitimate, not fraud"
+
 # ── Collab splitting (artist-level attribution) ─────────────────────────
 COLLAB_SPLIT_REGEX = r",\s*|\s*&\s*|\s*ft\.?\s*|\s*feat\.?\s*"
 

@@ -251,3 +251,59 @@ def test_labeling_score_metrics():
     assert m["labeled"] == 4
     assert (m["tp"], m["fp"], m["fn"], m["tn"]) == (1, 1, 1, 1)
     assert m["precision"] == 0.5 and m["recall"] == 0.5
+
+
+# ── One-off event-spike confounder ──────────────────────────────────────
+def _artist_span(**kw):
+    base = dict(flagged_days=10, bot_streams=800.0, total_streams=1000.0, bot_pct=80.0,
+                confidence=50.0, note="")
+    base.update(kw)
+    return base
+
+
+def test_oneoff_confounder_clears_isolated_burst():
+    # A 20-day flagged burst inside a 4-year career -> event, not fraud.
+    d = pd.Timestamp("2018-06-01")
+    df = pd.DataFrame([_artist_span(
+        first_active=pd.Timestamp("2016-01-01"), last_active=pd.Timestamp("2020-01-01"),
+        first_flag=d, last_flag=d + pd.Timedelta(days=20),
+    )])
+    out = run_pipeline.apply_oneoff_confounder(df)
+    assert out.loc[0, "bot_pct"] == 0.0
+    assert out.loc[0, "confidence"] < 50.0
+    assert "One-off" in out.loc[0, "note"]
+
+
+def test_oneoff_confounder_keeps_recurring():
+    # Flags span ~2 years -> sustained/recurring, left untouched (e.g. BTS comebacks).
+    df = pd.DataFrame([_artist_span(
+        bot_pct=50.0, bot_streams=500.0,
+        first_active=pd.Timestamp("2018-01-01"), last_active=pd.Timestamp("2021-01-01"),
+        first_flag=pd.Timestamp("2018-06-01"), last_flag=pd.Timestamp("2020-06-01"),
+    )])
+    out = run_pipeline.apply_oneoff_confounder(df)
+    assert out.loc[0, "bot_pct"] == 50.0
+
+
+def test_oneoff_confounder_keeps_short_career():
+    # Short burst but also a short career (<1yr) -> can't call it a one-off event.
+    d = pd.Timestamp("2019-06-01")
+    df = pd.DataFrame([_artist_span(
+        first_active=pd.Timestamp("2019-05-01"), last_active=pd.Timestamp("2019-07-01"),
+        first_flag=d, last_flag=d + pd.Timedelta(days=10),
+    )])
+    out = run_pipeline.apply_oneoff_confounder(df)
+    assert out.loc[0, "bot_pct"] == 80.0
+
+
+def test_oneoff_confounder_keeps_sparse_flags():
+    # Only 2 flagged days -> too sparse to be a sustained event burst; protects
+    # the small real signal on sparse data (e.g. BTS's 2 flagged US/Global days).
+    d = pd.Timestamp("2018-06-01")
+    df = pd.DataFrame([_artist_span(
+        flagged_days=2, bot_pct=30.0,
+        first_active=pd.Timestamp("2016-01-01"), last_active=pd.Timestamp("2020-01-01"),
+        first_flag=d, last_flag=d,
+    )])
+    out = run_pipeline.apply_oneoff_confounder(df)
+    assert out.loc[0, "bot_pct"] == 30.0
