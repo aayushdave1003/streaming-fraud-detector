@@ -160,13 +160,20 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. (Optional) Spotify API access for genre/audio-feature scripts
+# 4. (Optional) Spotify API credentials — for the legacy fetch scripts only;
+#    not needed for the pipeline, the dashboard, or genre tagging
 cp .env.example .env
 #   then edit .env with your Spotify app credentials
 ```
 
 Get Spotify credentials from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 The `.env` file is gitignored — **never commit real credentials.**
+
+> **If you have Anaconda installed,** `source venv/bin/activate` may not win — conda's shell init can
+> re-prepend its own path, silently leaving you on the wrong interpreter with an older `pyarrow`. The
+> symptom is a Parquet read dying with `OSError: Repetition level histogram size mismatch`, which looks
+> like a corrupt data file but isn't. Verify with `python -c "import pyarrow; print(pyarrow.__version__)"`
+> (needs 24.0.0 to read these files), or sidestep it entirely by invoking `./venv/bin/python` directly.
 
 ---
 
@@ -198,8 +205,8 @@ python labeling.py score
 # 4. score NEW chart data with the saved model (no refit)
 python run_pipeline.py --score new_day.csv
 
-# tag genres (offline, no API)  ...or online via Spotify API
-python assign_genres.py            # / python fetch_genres.py
+# tag genres — offline tagger is the only working path (see Known limitations)
+python assign_genres.py
 
 # curated real-world incidents table
 python real_world_data.py
@@ -252,6 +259,21 @@ artist totals stay consistent:
 with a 2017–2021-vs-2025 temporal caveat); `benchmark.py` plants known synthetic bot boosts and
 measures day/track recall across boost magnitudes and contamination (recall is a tunable dial, not a
 ceiling — see ROADMAP).
+
+---
+
+## Known limitations
+
+- **Genre tagging is offline-only.** `fetch_genres.py` is retained but no longer functional:
+  Spotify removed the artist `genres` field from the Web API, so there is no live source to
+  backfill from. `assign_genres.py` (a local keyword tagger) produces `artist_genres.csv`, which
+  means genres are approximate and only as good as that mapping. This is an upstream API change,
+  not an unfinished feature.
+- **Validation is indirect.** The 8 documented purge incidents are artist-level and from ~2025,
+  while the chart data is 2017–2021; `benchmark.py` plants synthetic anomalies as a proxy. Real
+  hand-labeled track-level ground truth is collected via `labeling.py` — see that harness.
+- **Anomaly is not proof.** Every flag is a statistical signal that a stream pattern is unusual.
+  See the disclaimer at the top.
 
 ---
 
