@@ -74,7 +74,7 @@ explainability column and a confidence-gated name guardrail; the
                                 │  StandardScaler
                 ┌───────────────┴───────────────┐
        Isolation Forest                 Local Outlier Factor
-       (contamination 3%)               (n_neighbors 20, 3%)
+       (contamination 2%)               (n_neighbors 20, 2%)
                 └───────────────┬───────────────┘
                         ENSEMBLE: flag only if BOTH agree
                                 │
@@ -111,7 +111,7 @@ The core pipeline is a set of small, testable modules:
 | `evaluate.py` | Validate output against documented purges (`real_world_reports.csv`) — precision/recall@k, percentile, ROC-AUC (see caveat). |
 | `tune.py` | Contamination sensitivity sweep → `tune_contamination.png/.csv`. |
 | `app.py` | **Streamlit dashboard** — genre browser, stream timelines, royalty calculator, explainability, confidence controls, name-surfacing guardrail. |
-| `tests/test_signals.py` | `pytest` suite (14 tests) for signals, look-ahead boundary, model persistence. |
+| `tests/test_signals.py` | `pytest` suite (26 tests) for signals, look-ahead boundary, model persistence. |
 
 Supporting scripts: `streaming_fraud_starter.py` (synthetic-data prototype),
 `real_world_data.py` (curated incidents), `assign_genres.py` / `fetch_genres.py`
@@ -265,7 +265,6 @@ API) · pytest.
 
 ## License
 
-No license is specified yet. Until one is added, this code is provided for educational and
-demonstrative purposes; the author retains all rights. The real-world incident data is compiled
+Released under the [MIT License](LICENSE). The real-world incident data is compiled
 from public reporting (Rolling Stone, Billboard, Music Business Worldwide, and others as cited in
 `real_world_data.py`).

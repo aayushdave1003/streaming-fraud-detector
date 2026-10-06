@@ -55,7 +55,7 @@ now lives.
   the sidebar) so unproven anomalies aren't publicly named.
 - [x] **Unit tests.** `tests/test_signals.py` covers the signals, the look-ahead
   boundary, collab splitting, confidence monotonicity, ensemble detection, and
-  model-persistence round-trip. `pytest` — 14 passing.
+  model-persistence round-trip. `pytest` — 26 passing.
 - [x] **Systematic holiday confounder.** `run_pipeline.apply_holiday_confounder`
   replaces the hardcoded name allowlist: when an artist's flagged days are
   overwhelmingly (≥60%) in Nov–Dec, the holiday-window bot streams are
