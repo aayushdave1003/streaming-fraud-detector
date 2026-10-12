@@ -307,3 +307,79 @@ def test_oneoff_confounder_keeps_sparse_flags():
     )])
     out = run_pipeline.apply_oneoff_confounder(df)
     assert out.loc[0, "bot_pct"] == 30.0
+
+
+# ── Track-level confounder parity ───────────────────────────────────────
+# The holiday and one-off confounders used to run on the artist table only, so
+# fraud_results_tracks.csv shipped uncorrected: a Christmas record flagged every
+# Nov-Dec sat at the top of the track suspect list while the artist table had
+# already excused it. These pin both levels to the same correction.
+
+def _daily_for_track_level(dates, streams, flags, holiday_months=(11, 12)):
+    """Minimal daily frame carrying every column track_level aggregates."""
+    d = pd.DataFrame({
+        "artist": "A", "title": "T",
+        "date": pd.to_datetime(list(dates)),
+        "streams": np.asarray(streams, dtype=float),
+        "ensemble_bot": np.asarray(flags, dtype=int),
+    })
+    d["month"] = d["date"].dt.month
+    d["bot_stream_val"] = d["streams"] * d["ensemble_bot"]
+    d["spike_ratio"] = 2.5
+    d["rolling_cv"] = 0.3
+    d["drop_after_spike"] = 0.0
+    d["release_adjusted"] = 0
+    d["holiday_window"] = d["month"].isin(holiday_months).astype(int)
+    d["holiday_bot_stream_val"] = d["bot_stream_val"] * d["holiday_window"]
+    d["holiday_flag"] = d["ensemble_bot"] * d["holiday_window"]
+    for c in signals.REASON_COLUMNS:
+        d[c] = 0
+    return d
+
+
+def test_track_level_applies_holiday_confounder():
+    # A Christmas record: every flagged day falls in December.
+    dates = pd.date_range("2019-12-20", periods=10, freq="D").tolist()
+    dates += pd.date_range("2020-06-01", periods=10, freq="D").tolist()
+    flags = [1] * 10 + [0] * 10
+    out = run_pipeline.track_level(_daily_for_track_level(dates, [1000] * 20, flags))
+    assert out.loc[0, "bot_pct"] == 0.0, "holiday-window bot streams must be reclassified"
+    assert out.loc[0, "note"] == config.HOLIDAY_NOTE
+
+
+def test_track_level_keeps_year_round_flags():
+    # Flags spread across the year -> not seasonality; must survive untouched.
+    dates = pd.date_range("2020-01-01", periods=24, freq="MS").tolist()
+    flags = [1, 0] * 12
+    out = run_pipeline.track_level(_daily_for_track_level(dates, [1000] * 24, flags))
+    assert out.loc[0, "bot_pct"] > 0.0
+    assert out.loc[0, "note"] != config.HOLIDAY_NOTE
+
+
+def test_track_level_applies_oneoff_confounder():
+    # Long chart life, all flags inside one short burst -> an event, not bots.
+    dates = pd.date_range("2019-01-01", periods=800, freq="D")
+    flags = np.zeros(800, dtype=int)
+    flags[400:410] = 1          # 10 flagged days in a 10-day span
+    out = run_pipeline.track_level(
+        _daily_for_track_level(dates, [1000] * 800, flags, holiday_months=()))
+    assert out.loc[0, "bot_pct"] == 0.0, "one-off event burst must be cleared"
+    assert out.loc[0, "note"] == config.ONEOFF_NOTE
+
+
+def test_track_level_matches_artist_level_on_same_data():
+    # Same underlying daily data must produce the same verdict at both levels.
+    # Sized to clear artist_level's qualification filters (>=90 days, >=5M
+    # streams, >=2 years active) so both frames are non-empty.
+    dates = pd.date_range("2019-01-01", periods=730, freq="D")
+    flags = np.zeros(730, dtype=int)
+    holiday = dates.month.isin([11, 12])
+    flags[np.flatnonzero(holiday)[:40]] = 1      # flags only ever in Nov-Dec
+    daily = _daily_for_track_level(dates, [100_000] * 730, flags)
+    daily["year"] = daily["date"].dt.year
+
+    track = run_pipeline.track_level(daily)
+    artist = run_pipeline.artist_level(daily)
+    assert not artist.empty, "fixture must clear the qualification filters"
+    assert track.loc[0, "bot_pct"] == artist.loc[0, "bot_pct"]
+    assert track.loc[0, "note"] == artist.loc[0, "note"] == config.HOLIDAY_NOTE

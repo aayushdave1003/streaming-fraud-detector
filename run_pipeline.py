@@ -55,9 +55,13 @@ def _confidence(flagged_days, total_days, max_spike, drop_count):
 def apply_holiday_confounder(artist: pd.DataFrame) -> pd.DataFrame:
     """Systematic holiday-seasonality correction (replaces the name allowlist).
 
-    For artists whose flagged days are overwhelmingly in Nov–Dec, reclassify the
+    For rows whose flagged days are overwhelmingly in Nov–Dec, reclassify the
     holiday-window bot streams as legitimate (drops bot_pct), scale confidence
     down, and annotate. Conservative by design via a high share threshold.
+
+    Level-agnostic: operates on any aggregated frame carrying ``flagged_days``,
+    ``holiday_flagged_days``, ``holiday_bot_streams``, ``bot_streams``,
+    ``total_streams``, ``confidence`` and ``note`` — artist *or* track.
     """
     denom = artist["flagged_days"].replace(0, np.nan)
     share = (artist["holiday_flagged_days"] / denom).fillna(0)
@@ -101,6 +105,9 @@ def apply_release_confounder(daily: pd.DataFrame) -> pd.DataFrame:
 def apply_oneoff_confounder(artist: pd.DataFrame) -> pd.DataFrame:
     """Clear one-off *event* spikes (viral / sync / tribute), which aren't fraud.
 
+    Level-agnostic (artist or track): a track with a long chart life whose
+    flags all fall in one short burst is the same phenomenon as an artist's.
+
     Bot campaigns sustain or recur; an organic event is a single short burst in
     an otherwise-flat multi-year history. When ALL of an artist's flagged days
     fall inside a <= ONEOFF_WINDOW_DAYS span yet they charted across
@@ -125,7 +132,10 @@ def apply_oneoff_confounder(artist: pd.DataFrame) -> pd.DataFrame:
 
 
 def track_level(daily: pd.DataFrame) -> pd.DataFrame:
-    track = daily.groupby(signals.GROUP).agg(
+    dc = daily.copy()
+    dc["flag_date"] = dc["date"].where(dc["ensemble_bot"] == 1)   # date of each flagged day (else NaT)
+
+    track = dc.groupby(signals.GROUP).agg(
         total_streams=("streams", "sum"),
         bot_streams=("bot_stream_val", "sum"),
         flagged_days=("ensemble_bot", "sum"),
@@ -134,6 +144,12 @@ def track_level(daily: pd.DataFrame) -> pd.DataFrame:
         avg_rolling_cv=("rolling_cv", "mean"),
         drop_after_spike_count=("drop_after_spike", "sum"),
         release_adjusted=("release_adjusted", "max"),
+        holiday_bot_streams=("holiday_bot_stream_val", "sum"),
+        holiday_flagged_days=("holiday_flag", "sum"),
+        first_active=("date", "min"),
+        last_active=("date", "max"),
+        first_flag=("flag_date", "min"),
+        last_flag=("flag_date", "max"),
         **_REASON_AGG,
     ).reset_index()
     track["bot_pct"] = (track["bot_streams"] / track["total_streams"] * 100).round(1)
@@ -142,8 +158,20 @@ def track_level(daily: pd.DataFrame) -> pd.DataFrame:
         track["max_spike_ratio"], track["drop_after_spike_count"],
     )
     track["flag_reasons"] = track.apply(signals.summarise_reasons, axis=1)
-    track["note"] = np.where(track["release_adjusted"] == 1, config.RELEASE_NOTE, "")
-    return track.drop(columns=list(signals.REASON_COLUMNS) + ["release_adjusted"])
+
+    # Same confounder corrections the artist table gets. Without these the track
+    # table shipped raw: a Christmas record flagged every Nov-Dec sat at the top
+    # of the suspect list even though the artist table had already excused it.
+    # Note precedence: holiday > one-off > release-window (holiday and one-off
+    # reclassify streams; the release note is informational, so it only fills a
+    # blank).
+    track["note"] = ""
+    track = apply_holiday_confounder(track)
+    track = apply_oneoff_confounder(track)
+    blank = track["note"].astype(str).str.len() == 0
+    track.loc[blank & (track["release_adjusted"] == 1), "note"] = config.RELEASE_NOTE
+    return track.drop(columns=list(signals.REASON_COLUMNS)
+                      + ["release_adjusted", "holiday_bot_streams", "holiday_flagged_days"])
 
 
 def artist_level(daily: pd.DataFrame) -> pd.DataFrame:
@@ -198,7 +226,8 @@ def artist_level(daily: pd.DataFrame) -> pd.DataFrame:
             artist.loc[mask, "confidence"] = (artist.loc[mask, "confidence"] * config.DEATH_SPIKE_CONF_MULT).round(1)
             artist.loc[mask, "note"] = config.DEATH_SPIKE_NOTE
 
-    # Confounders: holiday seasonality, then one-off event spikes.
+    # Confounders: holiday seasonality, then one-off event spikes (track_level
+    # applies the same two, so the tables stay consistent).
     artist = apply_holiday_confounder(artist)
     artist = apply_oneoff_confounder(artist)
     return artist.drop(columns=["holiday_bot_streams", "holiday_flagged_days"])
