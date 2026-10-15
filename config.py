@@ -107,6 +107,14 @@ ONEOFF_MIN_CAREER_DAYS = 365
 # validate on (e.g. BTS has only 2 flagged US/Global days). A real event burst
 # (Jessie J's weeks-long China-TV spike) flags many days; sparse noise does not.
 ONEOFF_MIN_FLAGGED_DAYS = 8
+# Flagged days separated by more than this start a new burst. The rule looks at
+# the *dominant* burst rather than first-flag-to-last-flag, because a global
+# span collapses the moment an artist has two unrelated flagged days years
+# apart: Jessie J's 2018 China-TV spike reads as a 1,663-day "event" at
+# all-regions scope and escapes the filter built for exactly her case.
+ONEOFF_GAP_DAYS = 30
+# Share of an entity's flagged days that must fall inside that one burst.
+ONEOFF_DOMINANT_SHARE = 0.8
 ONEOFF_CONF_MULT = 0.2
 ONEOFF_NOTE = "⚡ One-off event spike (viral/sync/tribute) — likely legitimate, not fraud"
 

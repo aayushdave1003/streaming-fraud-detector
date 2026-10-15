@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 
 import pandas as pd
@@ -45,7 +46,8 @@ def positives_present(results: pd.DataFrame, real_world: pd.DataFrame):
 def evaluate(results_path: str = config.RESULTS_ARTISTS,
              real_world_path: str = config.REAL_WORLD,
              score_col: str = "bot_pct",
-             write_report: bool = True, quiet: bool = False) -> dict:
+             write_report: bool = True, quiet: bool = False,
+             report_path: str | None = None) -> dict:
     results = pd.read_csv(results_path)
     real_world = pd.read_csv(real_world_path)
     results["_norm"] = results["artist"].map(normalize)
@@ -98,8 +100,20 @@ def evaluate(results_path: str = config.RESULTS_ARTISTS,
               "score_col": score_col, "metrics": metrics, "positives": per_artist}
 
     if write_report:  # tune.py passes write_report=False so its sweep can't clobber the canonical report
-        with open(config.EVAL_REPORT, "w") as f:
+        # The canonical eval_report.json describes the *committed* results. Writing
+        # it after scoring some other results file (an --output-dir experiment, a
+        # different region scope) leaves the repo claiming numbers its own CSVs
+        # don't support — so an off-default --results writes alongside that file
+        # instead, unless a path is given explicitly.
+        out = report_path
+        if out is None:
+            out = config.EVAL_REPORT
+            if os.path.abspath(results_path) != os.path.abspath(config.RESULTS_ARTISTS):
+                out = os.path.join(os.path.dirname(os.path.abspath(results_path)),
+                                   os.path.basename(config.EVAL_REPORT))
+        with open(out, "w") as f:
             json.dump(report, f, indent=2)
+        report["report_path"] = out
 
     if not quiet:
         _print_report(report)
@@ -139,8 +153,15 @@ def main() -> None:
     p.add_argument("--results", default=config.RESULTS_ARTISTS)
     p.add_argument("--real-world", default=config.REAL_WORLD)
     p.add_argument("--score-col", default="bot_pct", choices=["bot_pct", "confidence"])
+    p.add_argument("--report", default=None,
+                   help=f"Where to write the JSON report. Default: {config.EVAL_REPORT} for the "
+                        "committed results, else alongside whatever --results points at.")
+    p.add_argument("--no-report", action="store_true", help="Score and print; write nothing.")
     args = p.parse_args()
-    evaluate(args.results, args.real_world, args.score_col)
+    r = evaluate(args.results, args.real_world, args.score_col,
+                 write_report=not args.no_report, report_path=args.report)
+    if not args.no_report:
+        print(f"  report written to {r.get('report_path')}")
 
 
 if __name__ == "__main__":

@@ -102,6 +102,40 @@ def apply_release_confounder(daily: pd.DataFrame) -> pd.DataFrame:
     return daily.drop(columns=["_rw_flag"])
 
 
+def flag_burst_stats(daily: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+    """Cluster each group's flagged days into bursts and summarise the largest.
+
+    Flagged days more than ``ONEOFF_GAP_DAYS`` apart begin a new burst. Returns
+    one row per group with the number of bursts, and the day-count and span of
+    the biggest one — the inputs the one-off confounder needs to tell "a single
+    short event" apart from "flags scattered across the years".
+    """
+    cols = group_cols + ["date"]
+    hits = daily.loc[daily["ensemble_bot"] == 1, cols].copy()
+    empty = pd.DataFrame(columns=group_cols + ["n_flag_bursts", "max_burst_days",
+                                               "max_burst_span_days"])
+    if hits.empty:
+        return empty
+
+    hits = hits.sort_values(group_cols + ["date"])
+    gap = hits.groupby(group_cols, sort=False)["date"].diff().dt.days
+    hits["_new_burst"] = (gap.isna() | (gap > config.ONEOFF_GAP_DAYS)).astype(int)
+    hits["_burst"] = hits.groupby(group_cols, sort=False)["_new_burst"].cumsum()
+
+    per_burst = hits.groupby(group_cols + ["_burst"], sort=False).agg(
+        burst_days=("date", "count"), _start=("date", "min"), _end=("date", "max"),
+    ).reset_index()
+    per_burst["burst_span"] = (per_burst["_end"] - per_burst["_start"]).dt.days
+
+    biggest = per_burst.loc[per_burst.groupby(group_cols, sort=False)["burst_days"].idxmax()]
+    n_bursts = per_burst.groupby(group_cols, sort=False)["_burst"].count().rename("n_flag_bursts")
+    out = (biggest.set_index(group_cols)[["burst_days", "burst_span"]]
+           .rename(columns={"burst_days": "max_burst_days",
+                            "burst_span": "max_burst_span_days"})
+           .join(n_bursts).reset_index())
+    return out
+
+
 def apply_oneoff_confounder(artist: pd.DataFrame) -> pd.DataFrame:
     """Clear one-off *event* spikes (viral / sync / tribute), which aren't fraud.
 
@@ -109,26 +143,43 @@ def apply_oneoff_confounder(artist: pd.DataFrame) -> pd.DataFrame:
     flags all fall in one short burst is the same phenomenon as an artist's.
 
     Bot campaigns sustain or recur; an organic event is a single short burst in
-    an otherwise-flat multi-year history. When ALL of an artist's flagged days
-    fall inside a <= ONEOFF_WINDOW_DAYS span yet they charted across
-    >= ONEOFF_MIN_CAREER_DAYS, treat it as an event — zero the bot streams and
-    down-weight confidence. Generalizes the hardcoded death-spike list and
-    catches international virality without region-specific rules. (Recurring
-    chart presence — e.g. BTS across comebacks — has a long flagged span and is
-    left untouched.)
+    an otherwise-flat multi-year history. So the test is on the *dominant
+    burst*: when >= ONEOFF_DOMINANT_SHARE of the flagged days sit in one burst
+    spanning <= ONEOFF_WINDOW_DAYS, inside a career of >= ONEOFF_MIN_CAREER_DAYS,
+    treat it as an event — zero the bot streams and down-weight confidence.
+    (Recurring chart presence — e.g. BTS across comebacks — spreads its flags
+    over many bursts, so no single one dominates, and is left untouched.)
+
+    This replaced a first-flag-to-last-flag span test, which broke as soon as an
+    entity had two unrelated flagged days years apart: at all-regions scope
+    Jessie J's China-TV spike measured 1,663 days and escaped the very filter
+    built for it. When burst columns are absent the only honest reading of
+    min/max is a single burst, and the rule degrades to the old behaviour.
     """
-    flagged_span = (artist["last_flag"] - artist["first_flag"]).dt.days
     career_span = (artist["last_active"] - artist["first_active"]).dt.days
+    flagged_span = (artist["last_flag"] - artist["first_flag"]).dt.days
     artist["flagged_span_days"] = flagged_span.fillna(-1).astype(int)
+
+    if "max_burst_days" in artist:
+        burst_days = artist["max_burst_days"].fillna(0)
+        burst_span = artist["max_burst_span_days"].fillna(10**6)
+    else:   # only min/max known -> must assume one burst covering the whole span
+        burst_days = artist["flagged_days"]
+        burst_span = flagged_span
+    dominant = burst_days / artist["flagged_days"].replace(0, np.nan)
+
     mask = ((artist["flagged_days"] >= config.ONEOFF_MIN_FLAGGED_DAYS)
-            & (flagged_span <= config.ONEOFF_WINDOW_DAYS)
+            & (burst_span <= config.ONEOFF_WINDOW_DAYS)
+            & (dominant >= config.ONEOFF_DOMINANT_SHARE)
             & (career_span >= config.ONEOFF_MIN_CAREER_DAYS))
     artist.loc[mask, "bot_streams"] = 0.0
     artist.loc[mask, "bot_pct"] = 0.0
     artist.loc[mask, "confidence"] = (artist.loc[mask, "confidence"] * config.ONEOFF_CONF_MULT).round(1)
     blank = artist["note"].astype(str).str.len() == 0   # keep any holiday/death note already set
     artist.loc[mask & blank, "note"] = config.ONEOFF_NOTE
-    return artist.drop(columns=["first_flag", "last_flag", "first_active", "last_active"])
+    drop = ["first_flag", "last_flag", "first_active", "last_active",
+            "max_burst_days", "max_burst_span_days", "n_flag_bursts"]
+    return artist.drop(columns=[c for c in drop if c in artist])
 
 
 def track_level(daily: pd.DataFrame) -> pd.DataFrame:
@@ -158,6 +209,7 @@ def track_level(daily: pd.DataFrame) -> pd.DataFrame:
         track["max_spike_ratio"], track["drop_after_spike_count"],
     )
     track["flag_reasons"] = track.apply(signals.summarise_reasons, axis=1)
+    track = track.merge(flag_burst_stats(dc, signals.GROUP), on=signals.GROUP, how="left")
 
     # Same confounder corrections the artist table gets. Without these the track
     # table shipped raw: a Christmas record flagged every Nov-Dec sat at the top
@@ -209,6 +261,8 @@ def artist_level(daily: pd.DataFrame) -> pd.DataFrame:
     )
     artist["flag_reasons"] = artist.apply(signals.summarise_reasons, axis=1)
     artist = artist.drop(columns=list(signals.REASON_COLUMNS))
+    bursts = flag_burst_stats(dc, ["artist_split"]).rename(columns={"artist_split": "artist"})
+    artist = artist.merge(bursts, on="artist", how="left")
 
     # Qualification filters (drop thin/low-volume artists and holiday catalog).
     artist = artist[

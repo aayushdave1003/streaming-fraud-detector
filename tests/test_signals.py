@@ -383,3 +383,85 @@ def test_track_level_matches_artist_level_on_same_data():
     assert not artist.empty, "fixture must clear the qualification filters"
     assert track.loc[0, "bot_pct"] == artist.loc[0, "bot_pct"]
     assert track.loc[0, "note"] == artist.loc[0, "note"] == config.HOLIDAY_NOTE
+
+
+# ── One-off confounder: burst clustering ────────────────────────────────
+# The rule used to measure first-flag-to-last-flag, so two unrelated flagged
+# days years apart read as one enormous "event" and the filter missed exactly
+# the cases it was built for (Jessie J's China-TV spike measured 1,663 days at
+# all-regions scope). It now tests the dominant burst.
+
+def _burst_row(**kw):
+    base = dict(flagged_days=10, bot_streams=800.0, total_streams=1000.0, bot_pct=80.0,
+                confidence=50.0, note="",
+                first_active=pd.Timestamp("2016-01-01"), last_active=pd.Timestamp("2020-01-01"),
+                first_flag=pd.Timestamp("2018-06-01"), last_flag=pd.Timestamp("2018-06-10"))
+    base.update(kw)
+    return base
+
+
+def test_oneoff_clears_dominant_burst_despite_distant_straggler():
+    # 9 of 10 flags in one 9-day burst; one straggler 3 years later. The old
+    # global-span test saw ~1100 days and kept it; the burst test clears it.
+    df = pd.DataFrame([_burst_row(
+        first_flag=pd.Timestamp("2016-06-01"), last_flag=pd.Timestamp("2019-07-01"),
+        max_burst_days=9, max_burst_span_days=9, n_flag_bursts=2,
+    )])
+    out = run_pipeline.apply_oneoff_confounder(df)
+    assert out.loc[0, "bot_pct"] == 0.0
+    assert "One-off" in out.loc[0, "note"]
+
+
+def test_oneoff_keeps_flags_spread_across_many_bursts():
+    # No single burst dominates (biggest holds 3 of 20) -> recurring, not an
+    # event. This is the BTS-across-comebacks case.
+    df = pd.DataFrame([_burst_row(
+        flagged_days=20, max_burst_days=3, max_burst_span_days=4, n_flag_bursts=7,
+    )])
+    out = run_pipeline.apply_oneoff_confounder(df)
+    assert out.loc[0, "bot_pct"] == 80.0
+    assert out.loc[0, "note"] == ""
+
+
+def test_oneoff_keeps_single_long_burst():
+    # One burst, but it runs far longer than the event window -> a sustained
+    # campaign, which is what the detector is for.
+    df = pd.DataFrame([_burst_row(
+        flagged_days=120, max_burst_days=120,
+        max_burst_span_days=config.ONEOFF_WINDOW_DAYS + 60, n_flag_bursts=1,
+    )])
+    out = run_pipeline.apply_oneoff_confounder(df)
+    assert out.loc[0, "bot_pct"] == 80.0
+
+
+def test_flag_burst_stats_splits_on_gap():
+    # Two clusters 200 days apart must register as two bursts, the larger
+    # holding 5 days.
+    a = pd.date_range("2019-01-01", periods=5, freq="D")
+    b = pd.date_range("2019-08-01", periods=3, freq="D")
+    daily = pd.DataFrame({
+        "artist": "A", "title": "T",
+        "date": a.append(b), "ensemble_bot": 1,
+    })
+    out = run_pipeline.flag_burst_stats(daily, ["artist", "title"])
+    assert out.loc[0, "n_flag_bursts"] == 2
+    assert out.loc[0, "max_burst_days"] == 5
+    assert out.loc[0, "max_burst_span_days"] == 4
+
+
+def test_flag_burst_stats_contiguous_is_one_burst():
+    daily = pd.DataFrame({
+        "artist": "A", "title": "T",
+        "date": pd.date_range("2019-01-01", periods=12, freq="D"), "ensemble_bot": 1,
+    })
+    out = run_pipeline.flag_burst_stats(daily, ["artist", "title"])
+    assert out.loc[0, "n_flag_bursts"] == 1
+    assert out.loc[0, "max_burst_days"] == 12
+
+
+def test_flag_burst_stats_handles_no_flags():
+    daily = pd.DataFrame({
+        "artist": "A", "title": "T",
+        "date": pd.date_range("2019-01-01", periods=5, freq="D"), "ensemble_bot": 0,
+    })
+    assert run_pipeline.flag_burst_stats(daily, ["artist", "title"]).empty
