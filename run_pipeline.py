@@ -151,10 +151,9 @@ def apply_oneoff_confounder(artist: pd.DataFrame) -> pd.DataFrame:
     over many bursts, so no single one dominates, and is left untouched.)
 
     This replaced a first-flag-to-last-flag span test, which broke as soon as an
-    entity had two unrelated flagged days years apart: at all-regions scope
-    Jessie J's China-TV spike measured 1,663 days and escaped the very filter
-    built for it. When burst columns are absent the only honest reading of
-    min/max is a single burst, and the rule degrades to the old behaviour.
+    entity had two unrelated flagged days years apart — any straggler silently
+    disabled the filter. When burst columns are absent the only honest reading
+    of min/max is a single burst, and the rule degrades to the old behaviour.
     """
     career_span = (artist["last_active"] - artist["first_active"]).dt.days
     flagged_span = (artist["last_flag"] - artist["first_flag"]).dt.days

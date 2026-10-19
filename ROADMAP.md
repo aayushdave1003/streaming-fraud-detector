@@ -103,14 +103,26 @@ now lives.
   confounder note: Jessie J (76.4% bot, a 2018 China-TV spike) and The
   Cranberries (42.9%, Dolores O'Riordan's death) lead a list of catalog acts,
   so the scope ships a leaderboard that misattributes tributes and virality.
-  Revisit only once the burst-clustering one-off confounder is verified
-  end-to-end at that scope (see below).
-- **Verify the burst-clustering one-off confounder end-to-end at all-regions
-  scope.** The dominant-burst rule is covered by unit tests and is a confirmed
-  no-op at US+Global (flags are sparse; the committed CSVs are byte-identical
-  and ROC-AUC holds at 0.935), but it has never run against the all-regions data
-  where the original failure lives — two attempts were killed by memory
-  pressure. Needs ~8 GB free; roughly 4 minutes of compute.
+  Revisit once the artist-level holiday gap below is closed.
+- **Artist-level holiday correction misses single-holiday-track artists.**
+  Jessie J tops the all-regions leaderboard at 76.4% bot, and the cause is not
+  the "2018 China-TV spike" this file previously claimed: 176 of her 197
+  all-regions rows are *Man With The Bag*, a Christmas record charting every
+  December 2017-2021. Her flags are 57% Nov-Dec — just under the 0.60
+  `HOLIDAY_FLAG_SHARE_THRESHOLD` — because her *other* tracks contribute
+  non-holiday flags that dilute the artist-wide share. The track-level holiday
+  confounder correctly clears the track; artist_level aggregates from `daily`
+  rather than from those corrected track verdicts, so the artist number stays
+  wrong. The fix is to propagate per-track holiday determinations up into the
+  artist aggregation instead of testing one artist-wide share. The Cranberries
+  (share 0.30, a genuine Dolores O'Riordan tribute) is the same shape.
+  Note the burst-clustering one-off rule provably *cannot* fire for either
+  case: with 12 of 21 flags in Nov-Dec, no 45-day window can hold 80% of them.
+  It fixed a real global-span bug, but not these two.
+- **Verify the burst-clustering one-off confounder at all-regions scope.** It is
+  unit-tested and a confirmed no-op at US+Global, but has never run end-to-end
+  at all-regions scope; two attempts were killed by memory pressure. Needs ~8 GB
+  free, roughly 4 minutes of compute.
 - Backfill genres via the Spotify API (`fetch_genres.py`) — currently blocked:
   Spotify deprecated the artist `genres` field, so `assign_genres.py` (offline)
   remains the source.

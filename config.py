@@ -109,9 +109,12 @@ ONEOFF_MIN_CAREER_DAYS = 365
 ONEOFF_MIN_FLAGGED_DAYS = 8
 # Flagged days separated by more than this start a new burst. The rule looks at
 # the *dominant* burst rather than first-flag-to-last-flag, because a global
-# span collapses the moment an artist has two unrelated flagged days years
-# apart: Jessie J's 2018 China-TV spike reads as a 1,663-day "event" at
-# all-regions scope and escapes the filter built for exactly her case.
+# span collapses the moment an entity has two unrelated flagged days years
+# apart, which silently disables the filter.
+# (Note: this does NOT address Jessie J / The Cranberries at all-regions scope,
+# despite what an earlier commit message claimed — those are artist-level
+# holiday-share misses, see ROADMAP. No 45-day window can hold 80% of their
+# flags.)
 ONEOFF_GAP_DAYS = 30
 # Share of an entity's flagged days that must fall inside that one burst.
 ONEOFF_DOMINANT_SHARE = 0.8
