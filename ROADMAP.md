@@ -94,8 +94,23 @@ now lives.
 
 - **Real** track/day-level ground truth (hand-labeled) — the injected benchmark
   is a proxy; the 8 documented incidents are artist-level and temporally offset.
-- Data-scope decision: keep US + Global, or regenerate from the full raw
-  `charts.csv` (all regions).
+- **Data scope: staying on US + Global** (decided 2026-10-18). An all-regions
+  run scores better on paper — 5,461 artists, 74,826 tracks, ROC-AUC 0.989 vs
+  0.935, documented-artist median percentile 99.2 vs 93.4 — but the gain is the
+  denominator, not the detector: `recall@50` is identical at 0.667 and
+  `precision@25` is *worse* (0.000 vs 0.040), and Kendrick Lamar falls from #11
+  to #101. More decisively, nothing in the all-regions top 10 carries a
+  confounder note: Jessie J (76.4% bot, a 2018 China-TV spike) and The
+  Cranberries (42.9%, Dolores O'Riordan's death) lead a list of catalog acts,
+  so the scope ships a leaderboard that misattributes tributes and virality.
+  Revisit only once the burst-clustering one-off confounder is verified
+  end-to-end at that scope (see below).
+- **Verify the burst-clustering one-off confounder end-to-end at all-regions
+  scope.** The dominant-burst rule is covered by unit tests and is a confirmed
+  no-op at US+Global (flags are sparse; the committed CSVs are byte-identical
+  and ROC-AUC holds at 0.935), but it has never run against the all-regions data
+  where the original failure lives — two attempts were killed by memory
+  pressure. Needs ~8 GB free; roughly 4 minutes of compute.
 - Backfill genres via the Spotify API (`fetch_genres.py`) — currently blocked:
   Spotify deprecated the artist `genres` field, so `assign_genres.py` (offline)
   remains the source.
